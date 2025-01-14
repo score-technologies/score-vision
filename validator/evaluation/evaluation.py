@@ -81,7 +81,7 @@ class GSRValidator:
         self.db_manager = None
         self._video_cache = {}
         self.client = OpenAI(api_key=openai_api_key)
-        self.chutes_api_key = os.environ.get("API_KEY")
+        self.chutes_api_key = os.environ.get("CHUTES_API_KEY")
         self.chutes_url = "https://chutes-opengvlab-internvl2-5-78b.chutes.ai/v1/chat/completions"
         self.rate_limiter = RateLimiter(VLM_RATE_LIMIT)
 
@@ -198,22 +198,45 @@ class GSRValidator:
         """
         try:
             async def _call():
-                payload = {"model": model_chutes, "messages": messages, "max_tokens": max_tokens}
+                payload = {
+                    "model": model_chutes,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature
+                }
+                logger.info(f"Chutes API request payload: {json.dumps(payload, indent=2)}")
+                
                 if self.chutes_api_key:
                     try:
                         async with httpx.AsyncClient() as client:
                             resp = await client.post(
                                 self.chutes_url,
                                 json=payload,
-                                headers={"Authorization": self.chutes_api_key},
+                                headers={"Authorization": f"Bearer {self.chutes_api_key}"},
                                 timeout=30.0
                             )
-                            resp.raise_for_status()
-                            return resp.json()["choices"][0]["message"]["content"]
+                            resp_json = resp.json()
+                            logger.info(f"Chutes API full response: {json.dumps(resp_json, indent=2)}")
+                            
+                            if not resp.is_success:
+                                error_detail = json.dumps(resp_json, indent=2)
+                                logger.error(f"Chutes API failed with status {resp.status_code}: {error_detail}")
+                                raise Exception(f"Chutes API error: {resp.status_code} - {error_detail}")
+                            
+                            if 'choices' not in resp_json or not resp_json['choices']:
+                                logger.error(f"Unexpected Chutes API response format: {json.dumps(resp_json, indent=2)}")
+                                raise Exception("Unexpected Chutes API response format")
+                            
+                            return resp_json["choices"][0]["message"]["content"]
+                    except httpx.HTTPError as e:
+                        logger.error(f"Chutes API HTTP error: {str(e)}")
                     except Exception as e:
-                        logger.warning(f"Chutes API error, will fallback: {str(e)}")
+                        logger.error(f"Chutes API error: {str(e)}")
+                    
+                    logger.warning("Falling back to OpenAI")
 
                 try:
+                    logger.debug(f"OpenAI request payload: {json.dumps(payload, indent=2)}")
                     openai_resp = await asyncio.wait_for(
                         asyncio.to_thread(
                             self.client.chat.completions.create,
@@ -224,6 +247,7 @@ class GSRValidator:
                         ),
                         timeout=OPENAI_TIMEOUT
                     )
+                    logger.debug(f"OpenAI full response: {json.dumps(openai_resp.model_dump(), indent=2)}")
                     return openai_resp.choices[0].message.content
                 except Exception as e:
                     logger.error(f"OpenAI fallback error: {str(e)}")
@@ -412,7 +436,7 @@ class GSRValidator:
             }
         ]
         try:
-            content = await self.ask_vlm(messages, max_tokens=10)
+            content = await self.ask_vlm(messages, max_tokens=200)
             if not content:
                 return 0.0
             content = self.clean_json_response(content)
@@ -610,7 +634,7 @@ class GSRValidator:
                 ]
             }
         ]
-        content = await self.ask_vlm(messages, max_tokens=10)
+        content = await self.ask_vlm(messages, max_tokens=1000)
         if not content:
             return 0.0
         content = self.clean_json_response(content)
