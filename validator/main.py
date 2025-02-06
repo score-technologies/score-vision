@@ -148,7 +148,9 @@ async def check_miner_availability(
     
     try:
         headers = {"validator-hotkey": hotkey}
-        response = await client.get(f"{server_address}/availability", headers=headers, timeout=5.0)
+        url = f"{server_address}/availability"
+        logger.debug(f"Checking availability for node {node.node_id} at {url}")
+        response = await client.get(url, headers=headers, timeout=5.0)
         response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
         
         is_available = response.json().get("available", False)
@@ -161,20 +163,28 @@ async def check_miner_availability(
             response_time_ms=response_time
         )
         
+        logger.debug(f"Node {node.node_id} availability: {is_available}, response time: {response_time:.2f}ms")
         return is_available
+    except httpx.RequestError as e:
+        response_time = (time.time() - start_time) * 1000
+        logger.warning(f"Failed to check availability for node {node.node_id}: Request error - {str(e)}")
+    except httpx.HTTPStatusError as e:
+        response_time = (time.time() - start_time) * 1000
+        logger.warning(f"Failed to check availability for node {node.node_id}: HTTP error {e.response.status_code} - {e.response.text}")
     except Exception as e:
         response_time = (time.time() - start_time) * 1000
-        # Log failed check
-        db_manager.log_availability_check(
-            node_id=node.node_id,
-            hotkey=node.hotkey,
-            is_available=False,
-            response_time_ms=response_time,
-            error=str(e)
-        )
-        
-        logger.warning(f"Failed to check availability for node {node.node_id}: {str(e)}")
-        return False
+        logger.warning(f"Failed to check availability for node {node.node_id}: Unexpected error - {str(e)}")
+    
+    # Log failed check
+    db_manager.log_availability_check(
+        node_id=node.node_id,
+        hotkey=node.hotkey,
+        is_available=False,
+        response_time_ms=response_time,
+        error=str(e)
+    )
+    
+    return False
 
 async def get_available_nodes(
     nodes: list[Node],
@@ -200,6 +210,10 @@ async def get_available_nodes(
     
     total_available = len(available_nodes)
     logger.info(f"Found {total_available} available nodes out of {len(nodes)} total nodes")
+    
+    # Log unavailable nodes
+    unavailable_nodes = [node for node, is_available in zip(nodes, availability_results) if not is_available]
+    logger.warning(f"Unavailable nodes: {', '.join([str(node.node_id) for node in unavailable_nodes])}")
     
     # If we have more available nodes than MAX_MINERS, randomly select MAX_MINERS
     selected_nodes = available_nodes
