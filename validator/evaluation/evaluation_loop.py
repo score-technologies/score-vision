@@ -353,6 +353,7 @@ async def evaluate_pending_responses(
         evaluation_results = []
         for resp in responses:
             if resp not in top_responses:
+                started_at = db_manager.get_challenge_assignment_sent_at(challenge['challenge_id'], resp.miner_hotkey)
                 evaluation_results.append({
                     "challenge_id": challenge['challenge_id'],
                     "miner_hotkey": resp.miner_hotkey,
@@ -362,7 +363,7 @@ async def evaluate_pending_responses(
                     "processing_time": resp.processing_time,
                     "validation_result": None,
                     "task_returned_data": None,
-                    "started_at": None, ## check if possible del
+                    "started_at": started_at,
                     "completed_at": None,  # Will be set by calculate_score
                     "received_at": None  # Will be set by calculate_score
                 })
