@@ -129,10 +129,10 @@ def calculate_speed_score(processing_time: float, min_time: float, max_time: flo
         return 1.0  # If all times are the same, give full score
         
     # Normalize time to 0-1 range
-    normalized_time = (processing_time - min_time) / (min(max_time,MAX_PROCESSING_TIME) - min_time)
+    normalized_time = (processing_time - min_time) / (MAX_PROCESSING_TIME - min_time)
     
     # Apply exponential scaling to more aggressively reward faster times
     # Using exponential decay with base e
-    exp_score = math.exp(-5 * normalized_time)  # -5 controls steepness of decay
+    exp_score = math.exp(-3 * normalized_time)  # -3 controls steepness of decay
     
     return max(0.0, min(1.0, exp_score))  # Ensure score stays in 0-1 range
