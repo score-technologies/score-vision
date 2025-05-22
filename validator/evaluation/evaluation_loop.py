@@ -19,7 +19,7 @@ from loguru import logger
 import cv2
 import tempfile
 from dataclasses import dataclass
-from validator.utils.frame_filter import (detect_pitch, batch_clip_verification)
+from validator.utils.frame_filter import (detect_pitch, batch_clip_verification, init_clip_model)
 
 # New constant for minimum number of players
 MIN_PLAYERS_PER_FRAME = 4
@@ -295,6 +295,7 @@ async def run_evaluation_loop(
     """Entrypoint that sets up the DB, validator, and runs the loop."""
     try:
         logger.info("Initializing evaluation loop...")
+        init_clip_model()
         db_manager = DatabaseManager(db_path)
         validator = GSRValidator(openai_api_key=openai_api_key, validator_hotkey=validator_hotkey)
         validator.db_manager = db_manager  # Let the validator store frame-level evaluations
