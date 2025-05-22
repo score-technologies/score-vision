@@ -31,7 +31,11 @@ async def run_challenge_loop():
     """Loop that sends challenges periodically (in a separate process)."""
     logger.info("[Process] Challenge sender loop starting...")
 
-    hotkey = os.getenv("VALIDATOR_HOTKEY")
+    hotkey_ss58 = os.getenv("VALIDATOR_HOTKEY")
+    if not hotkey_ss58:
+        raise ValueError("VALIDATOR_HOTKEY env var not set")
+
+    hotkey = Keypair(ss58_address=hotkey_ss58)
     db_manager = DatabaseManager(os.environ["DB_PATH"])
     validator = GSRValidator(openai_api_key=os.environ["OPENAI_API_KEY"], validator_hotkey=hotkey.ss58_address)
     substrate = get_substrate()
