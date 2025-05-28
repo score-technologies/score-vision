@@ -12,6 +12,7 @@ from validator.config import CHALLENGE_INTERVAL, CHALLENGE_TIMEOUT
 from validator.db.operations import DatabaseManager
 from validator.evaluation.evaluation import GSRValidator
 from fiber.chain.interface import get_substrate
+from fiber.chain.chain_utils import load_hotkey_keypair, load_coldkeypub_keypair
 
 import httpx
 from loguru import logger
@@ -32,11 +33,13 @@ async def run_challenge_loop():
     """Loop that sends challenges periodically (in a separate process)."""
     logger.info("[Process] Challenge sender loop starting...")
 
-    hotkey_ss58 = os.getenv("VALIDATOR_HOTKEY")
-    if not hotkey_ss58:
-        raise ValueError("VALIDATOR_HOTKEY env var not set")
+    wallet_name = os.getenv("WALLET_NAME")
+    hotkey_name = os.getenv("HOTKEY_NAME")
+    if not wallet_name or not hotkey_name:
+        raise ValueError("WALLET_NAME or HOTKEY_NAME environment variables not set")
 
-    hotkey = Keypair(ss58_address=hotkey_ss58)
+    hotkey = load_hotkey_keypair(wallet_name, hotkey_name)
+
     db_manager = DatabaseManager(os.environ["DB_PATH"])
     validator = GSRValidator(openai_api_key=os.environ["OPENAI_API_KEY"], validator_hotkey=hotkey.ss58_address)
     substrate = get_substrate()
