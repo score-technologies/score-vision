@@ -39,9 +39,10 @@ async def run_challenge_loop():
     db_manager = DatabaseManager(os.environ["DB_PATH"])
     validator = GSRValidator(openai_api_key=os.environ["OPENAI_API_KEY"], validator_hotkey=hotkey.ss58_address)
     substrate = get_substrate()
+    limits = httpx.Limits(max_connections=256, max_keepalive_connections=64)
+    timeout = httpx.Timeout(connect=5.0, read=CHALLENGE_TIMEOUT.total_seconds(), write=10.0, pool=10)
 
-
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
         while True:
             try:
                 logger.info("Fetching active nodes...")
