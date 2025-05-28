@@ -12,12 +12,7 @@ from validator.config import CHALLENGE_INTERVAL
 from validator.db.operations import DatabaseManager
 from validator.evaluation.evaluation import GSRValidator
 from fiber.chain.interface import get_substrate
-from validator.main import (
-    get_active_nodes_with_stake,
-    get_available_nodes,
-    construct_server_address,
-    process_challenge_results,
-)
+
 import httpx
 from loguru import logger
 from substrateinterface import Keypair
@@ -28,6 +23,12 @@ def start_challenge_sender():
 
 
 async def run_challenge_loop():
+    from validator.main import (
+        get_active_nodes_with_stake,
+        get_available_nodes,
+        construct_server_address,
+        process_challenge_results,
+        )
     """Loop that sends challenges periodically (in a separate process)."""
     logger.info("[Process] Challenge sender loop starting...")
 
