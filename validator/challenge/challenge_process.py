@@ -8,7 +8,7 @@ from validator.challenge.send_challenge import send_challenge
 from validator.challenge.challenge_types import GSRChallenge, ChallengeType, ChallengeTask
 from validator.utils.api import get_next_challenge
 from validator.utils.async_utils import AsyncBarrier
-from validator.config import CHALLENGE_INTERVAL
+from validator.config import CHALLENGE_INTERVAL, CHALLENGE_TIMEOUT
 from validator.db.operations import DatabaseManager
 from validator.evaluation.evaluation import GSRValidator
 from fiber.chain.interface import get_substrate
