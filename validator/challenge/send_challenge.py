@@ -125,7 +125,9 @@ async def send_challenge(
                     payload=payload,
                     timeout=timeout
                 )
-            except:
+                response.raise_for_status()
+            except Exception as e:
+                logger.warning(f"Error sending challenge to {hotkey} (node {node_id}): {e}. Returning empty response.")
                 response =  httpx.Response(
                     status_code=200,
                     json={"frames": []},
@@ -133,7 +135,6 @@ async def send_challenge(
             received_time = datetime.now(timezone.utc)
             processing_time = (received_time - sent_time).total_seconds()
 
-            response.raise_for_status()
             if remaining_barriers: 
                 await barrier.wait()
                 remaining_barriers -= 1
