@@ -125,7 +125,7 @@ async def send_challenge(
                     payload=payload,
                     timeout=timeout
                 )
-            except httpx.TimeoutException as e:
+            except:
                 response =  httpx.Response(
                     status_code=200,
                     json={"frames": []},
