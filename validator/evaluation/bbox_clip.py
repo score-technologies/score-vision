@@ -277,7 +277,7 @@ def evaluate_frame(
     }
     bboxes = [bbox for bbox in bboxes if is_bbox_large_enough(bbox)]
     if not bboxes:
-        print(f"Frame {frame_id}: all bboxes filtered out due to small size — skipping.")
+        logger.info(f"Frame {frame_id}: all bboxes filtered out due to small size — skipping.")
         return 0.0
         
     rois = extract_regions_of_interest_from_image(
