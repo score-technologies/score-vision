@@ -19,6 +19,8 @@ import torch
 
 SCALE_FOR_CLIP = 4.0
 FRAMES_PER_VIDEO = 750
+MIN_WIDTH = 20
+MIN_HEIGHT = 30
 logger = getLogger("Bounding Box Evaluation Pipeline")
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to("cpu")
 data_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
@@ -254,7 +256,13 @@ def extract_regions_of_interest_from_image(bboxes:list[dict[str,int|tuple[int,in
         image_array[y1:y2, x1:x2, :] = 0  
     return rois
   
-
+def is_bbox_large_enough(bbox_dict):
+    x1, y1, x2, y2 = bbox_dict["bbox"]
+    w, h = x2 - x1, y2 - y1
+    if bbox_dict["class_id"] == 0:  # FOOTBALL
+        return True
+    return w >= MIN_WIDTH and h >= MIN_HEIGHT
+    
 def evaluate_frame(
     frame_id:int,
     image_array:ndarray,
@@ -267,7 +275,11 @@ def evaluate_frame(
         BoundingBoxObject.REFEREE: 0,
         BoundingBoxObject.OTHER: 0
     }
-
+    bboxes = [bbox for bbox in bboxes if is_bbox_large_enough(bbox)]
+    if not bboxes:
+        print(f"Frame {frame_id}: all bboxes filtered out due to small size — skipping.")
+        return 0.0
+        
     rois = extract_regions_of_interest_from_image(
         bboxes=bboxes,
         image_array=image_array[:,:,::-1] # BGR -> RGB
