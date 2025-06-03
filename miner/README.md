@@ -61,13 +61,7 @@ cp miner/.env.example miner/.env
 curl ifconfig.me
 ```
 
-2. Install Fiber (if doing locally):
-
-```bash
-uv pip install "git+https://github.com/rayonlabs/fiber.git@2.1.0#egg=fiber[full]"
-```
-
-3. Register your IP:
+2. Register your IP:
 
 ```bash
 fiber-post-ip --netuid 44 --subtensor.network finney --external_port [YOUR-PORT] --wallet.name [WALLET_NAME] --wallet.hotkey [HOTKEY_NAME] --external_ip [YOUR-IP]

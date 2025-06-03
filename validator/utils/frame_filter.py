@@ -4,28 +4,44 @@ from PIL import Image
 import cv2
 import numpy as np
 
-clip_model, _, clip_preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
-clip_tokenizer = open_clip.get_tokenizer('ViT-B-32')
+# Global variables
+_clip_model = None
+_clip_preprocess = None
+_text_features = None
+_texts = ["a football pitch", "a close-up of a football player", "a stadium with crowd"]
 
-# Forcer le CPU
-device = torch.device("cpu")
-clip_model.to(device)
-clip_model.eval()
+def init_clip_model():
+    """Clip to be called in the subprocess"""
+    global _clip_model, _clip_preprocess, _text_features
 
-# Préparer les textes à comparer
-texts = ["a football pitch", "a close-up of a football player", "a stadium with crowd"]
-with torch.no_grad():
-    text_tokens = clip_tokenizer(texts).to(device)
-    text_features = clip_model.encode_text(text_tokens)
-    text_features /= text_features.norm(dim=-1, keepdim=True)
+    clip_model, _, clip_preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
+    tokenizer = open_clip.get_tokenizer('ViT-B-32')
+
+    device = torch.device("cpu")
+    clip_model.to(device)
+    clip_model.eval()
+
+    with torch.no_grad():
+        text_tokens = tokenizer(_texts).to(device)
+        text_features = clip_model.encode_text(text_tokens)
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+
+    _clip_model = clip_model
+    _clip_preprocess = clip_preprocess
+    _text_features = text_features
 
 def batch_clip_verification(image_paths, threshold=0.7):
+    global _clip_model, _clip_preprocess, _text_features, _texts
+
+    if _clip_model is None or _clip_preprocess is None or _text_features is None:
+        raise RuntimeError("CLIP model not initialized. Call init_clip_model() first.")
+
     image_features_list = []
     valid_paths = []
 
     for path in image_paths:
         try:
-            image = clip_preprocess(Image.open(path)).unsqueeze(0)
+            image = _clip_preprocess(Image.open(path)).unsqueeze(0)
             image_features_list.append(image)
             valid_paths.append(path)
         except:
@@ -34,17 +50,17 @@ def batch_clip_verification(image_paths, threshold=0.7):
     if not image_features_list:
         return {}
 
-    batch = torch.cat(image_features_list).to(device)
+    batch = torch.cat(image_features_list).to("cpu")
 
     with torch.no_grad():
-        image_features = clip_model.encode_image(batch)
+        image_features = _clip_model.encode_image(batch)
         image_features /= image_features.norm(dim=-1, keepdim=True)
-        similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+        similarity = (100.0 * image_features @ _text_features.T).softmax(dim=-1)
 
     clip_scores = {}
     for i, path in enumerate(valid_paths):
         top_prob, top_label = similarity[i].max(0)
-        if texts[top_label] == "a football pitch":
+        if _texts[top_label] == "a football pitch":
             clip_scores[path] = top_prob.item()
         else:
             clip_scores[path] = 0.0

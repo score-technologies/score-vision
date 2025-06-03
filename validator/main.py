@@ -18,6 +18,10 @@ from fiber.chain.chain_utils import load_hotkey_keypair, load_coldkeypub_keypair
 from loguru import logger
 from substrateinterface import Keypair
 
+from multiprocessing import Process
+from validator.evaluation.evaluation_process import start_evaluation
+from validator.challenge.challenge_process import start_challenge_sender
+
 # Add project root to Python path
 project_root = str(Path(__file__).resolve().parents[2])
 sys.path.append(project_root)
@@ -363,23 +367,17 @@ async def main():
 
     # Initialize HTTP client with long timeout
     async with httpx.AsyncClient(timeout=CHALLENGE_TIMEOUT.total_seconds()) as client:
-        active_challenge_tasks = []  # Track active challenges
-        
+        os.environ["DB_PATH"] = str(DB_PATH)
+        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+        os.environ["VALIDATOR_HOTKEY"] = hotkey.ss58_address
         # Start evaluation loop as a separate task
         logger.info("Starting evaluation loop task...")
-        evaluation_task = asyncio.create_task(
-            run_evaluation_loop(
-                db_path=DB_PATH,
-                openai_api_key=OPENAI_API_KEY,
-                validator_hotkey=hotkey.ss58_address,
-                batch_size=10,
-                sleep_interval=120
-            )
-        )
-        evaluation_task.add_done_callback(
-            lambda t: logger.error(f"Evaluation task ended unexpectedly: {t.exception()}")
-            if t.exception() else None
-        )
+        
+        evaluation_proc = Process(target=start_evaluation)
+        evaluation_proc.start()
+
+        challenge_proc = Process(target=start_challenge_sender)
+        challenge_proc.start()
         
         # Start weights update loop as a separate task
         logger.info("Starting weights update task...")
@@ -406,128 +404,24 @@ async def main():
                     logger.info(f"Main loop iteration {iteration}")
                     
                     # Check if any background tasks failed
-                    for task in [evaluation_task, weights_task, cleanup_task]:
+                    for task in [weights_task, cleanup_task]:
                         if task.done() and not task.cancelled():
                             exc = task.exception()
                             if exc:
                                 logger.error(f"Background task failed: {exc}")
                                 # Restart the failed task
-                                if task == evaluation_task:
-                                    logger.info("Restarting evaluation loop...")
-                                    evaluation_task = asyncio.create_task(
-                                        run_evaluation_loop(
-                                            db_path=DB_PATH,
-                                            openai_api_key=OPENAI_API_KEY,
-                                            validator_hotkey=hotkey.ss58_address,
-                                            batch_size=10,
-                                            sleep_interval=10
-                                        )
-                                    )
-                                elif task == weights_task:
+                                if task == weights_task:
                                     logger.info("Restarting weights update loop...")
                                     weights_task = asyncio.create_task(weights_update_loop(db_manager))
                                 elif task == cleanup_task:
                                     logger.info("Restarting cleanup task...")
                                     cleanup_task = asyncio.create_task(periodic_cleanup(db_manager))
 
-                    # Clean up completed challenge tasks
-                    active_challenge_tasks = [
-                        task for task in active_challenge_tasks 
-                        if not task.task.done()
-                    ]
-                    
-                    # Get active nodes with sufficient stake
-                    active_nodes = get_active_nodes_with_stake()
-                    num_active = len(active_nodes)
-                    
-                    if num_active < MIN_MINERS:
-                        logger.warning(f"Only {num_active} active nodes with sufficient stake (minimum {MIN_MINERS} required)")
-                        logger.info(f"Will check again in {CHALLENGE_INTERVAL.total_seconds()} seconds...")
-                        await asyncio.sleep(CHALLENGE_INTERVAL.total_seconds())
-                        continue
-
-                    logger.info(f"Found {num_active} active nodes with sufficient stake")
-                    
-                    # Check availability of nodes
-                    available_nodes = await get_available_nodes(active_nodes, client, db_manager, hotkey.ss58_address)
-                    num_available = len(available_nodes)
-                    
-                    if num_available < MIN_MINERS:
-                        logger.warning(f"Only {num_available} nodes are available (minimum {MIN_MINERS} required)")
-                        logger.info(f"Sleeping for {CHALLENGE_INTERVAL.total_seconds()} seconds before next availability check...")
-                        await asyncio.sleep(CHALLENGE_INTERVAL.total_seconds())
-                        continue
-
-                    logger.info(f"Processing {num_available} available nodes")
-
-                    # Generate and send challenges
-                    challenge_time = time.time()
-                    new_challenge_tasks = []
-                    barrier = AsyncBarrier(parties=len(available_nodes))
-
-                    # Fetch next challenge from API with retries
-                    challenge_data = await get_next_challenge_with_retry(hotkey.ss58_address)
-                    if not challenge_data:
-                        logger.info(f"Sleeping for {CHALLENGE_INTERVAL.total_seconds()} seconds before next challenge check...")
-                        await asyncio.sleep(CHALLENGE_INTERVAL.total_seconds())
-                        continue
-
-                    logger.info(f"Processing challenge: task_id={challenge_data['task_id']}")
-
                     # Log background task status
                     logger.info("Background task status:")
-                    logger.info(f"  - Evaluation task running: {not evaluation_task.done()}")
                     logger.info(f"  - Weights task running: {not weights_task.done()}")
                     logger.info(f"  - Cleanup task running: {not cleanup_task.done()}")
                     
-                    for node in available_nodes:
-                        # Create challenge
-                        challenge = GSRChallenge(
-                            challenge_id=challenge_data['task_id'],
-                            type=ChallengeType.GSR,
-                            created_at=datetime.now(timezone.utc),
-                            video_url=challenge_data['video_url']
-                        )
-                        
-                        task = asyncio.create_task(
-                            send_challenge(
-                                challenge=challenge,
-                                server_address=construct_server_address(node),
-                                hotkey=node.hotkey,
-                                keypair=hotkey,
-                                node_id=node.node_id,
-                                barrier=barrier,
-                                db_manager=db_manager,
-                                client=client
-                            )
-                        )
-                        
-                        challenge_task = ChallengeTask(
-                            node_id=node.node_id,
-                            task=task,
-                            timestamp=datetime.now(timezone.utc),
-                            challenge=challenge,
-                            miner_hotkey=node.hotkey
-                        )
-                        new_challenge_tasks.append(challenge_task)
-                    
-                    # Add new challenges to active tasks
-                    active_challenge_tasks.extend(new_challenge_tasks)
-                    
-                    # Process any completed challenges
-                    await process_challenge_results(
-                        new_challenge_tasks,
-                        db_manager,
-                        validator,
-                        hotkey,
-                        substrate
-                    )
-
-                    # Log status
-                    num_active_challenges = len(active_challenge_tasks)
-                    if num_active_challenges > 0:
-                        logger.info(f"Currently tracking {num_active_challenges} active challenges")
-
                     # Sleep until next challenge interval
                     await asyncio.sleep(CHALLENGE_INTERVAL.total_seconds())
 
@@ -538,13 +432,22 @@ async def main():
                     await asyncio.sleep(CHALLENGE_INTERVAL.total_seconds())
         finally:
             # Cancel evaluation and weights loops
-            evaluation_task.cancel()
             weights_task.cancel()
             cleanup_task.cancel()
             try:
-                await asyncio.gather(evaluation_task, weights_task, cleanup_task, return_exceptions=True)
+                await asyncio.gather(weights_task, cleanup_task, return_exceptions=True)
             except asyncio.CancelledError:
                 pass
+                
+            if evaluation_proc.is_alive():
+                logger.info("Terminating evaluation subprocess...")
+                evaluation_proc.terminate()
+                evaluation_proc.join()
+                
+            if challenge_proc.is_alive():
+                logger.info("Terminating challenge subprocess...")
+                challenge_proc.terminate()
+                challenge_proc.join()
 
     # Cleanup
     if db_manager:
