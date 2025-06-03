@@ -19,7 +19,7 @@ import torch
 
 SCALE_FOR_CLIP = 4.0
 FRAMES_PER_VIDEO = 750
-MIN_WIDTH = 20
+MIN_WIDTH = 15
 MIN_HEIGHT = 40
 logger = getLogger("Bounding Box Evaluation Pipeline")
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to("cpu")
