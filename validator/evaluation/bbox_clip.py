@@ -271,7 +271,7 @@ def is_touching_scoreboard_zone(bbox_dict, frame_width=1280, frame_height=720):
     scoreboard_left = 0
     scoreboard_right_left = 500
     scoreboard_right_right = frame_width
-    scoreboard_right_left_start = frame_width - 250
+    scoreboard_right_left_start = frame_width - 500
 
     intersects_top_left = not (x2 < scoreboard_left or x1 > scoreboard_right_left or y2 < scoreboard_top or y1 > scoreboard_bottom)
 
