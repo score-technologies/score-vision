@@ -262,6 +262,22 @@ def is_bbox_large_enough(bbox_dict):
     if bbox_dict["class_id"] == 0:  # FOOTBALL
         return True
     return w >= MIN_WIDTH and h >= MIN_HEIGHT
+
+def is_touching_scoreboard_zone(bbox_dict, frame_width=1280, frame_height=720):
+    x1, y1, x2, y2 = bbox_dict["bbox"]
+
+    scoreboard_top = 0
+    scoreboard_bottom = 100
+    scoreboard_left = 0
+    scoreboard_right_left = 500
+    scoreboard_right_right = frame_width
+    scoreboard_right_left_start = frame_width - 250
+
+    intersects_top_left = not (x2 < scoreboard_left or x1 > scoreboard_right_left or y2 < scoreboard_top or y1 > scoreboard_bottom)
+
+    intersects_top_right = not (x2 < scoreboard_right_left_start or x1 > scoreboard_right_right or y2 < scoreboard_top or y1 > scoreboard_bottom)
+
+    return intersects_top_left or intersects_top_right
     
 def evaluate_frame(
     frame_id:int,
@@ -275,9 +291,9 @@ def evaluate_frame(
         BoundingBoxObject.REFEREE: 0,
         BoundingBoxObject.OTHER: 0
     }
-    bboxes = [bbox for bbox in bboxes if is_bbox_large_enough(bbox)]
+    bboxes = [bbox for bbox in bboxes if is_bbox_large_enough(bbox) and not is_touching_scoreboard_zone(bbox, image_array.shape[1], image_array.shape[0])]
     if not bboxes:
-        logger.info(f"Frame {frame_id}: all bboxes filtered out due to small size — skipping.")
+        logger.info(f"Frame {frame_id}: all bboxes filtered out due to small size or corners — skipping.")
         return 0.0
         
     rois = extract_regions_of_interest_from_image(
