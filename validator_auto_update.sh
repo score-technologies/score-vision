@@ -20,7 +20,7 @@ activate_venv() {
 activate_venv
 
 while true; do
-    sleep 5
+    sleep 300
 
     VERSION=$(git rev-parse HEAD)
     
