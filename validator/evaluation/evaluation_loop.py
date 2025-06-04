@@ -129,7 +129,8 @@ async def evaluate_pending_responses(
             db_manager.mark_responses_failed(challenge['challenge_id'])
             return
         if not video_path or not video_path.exists():
-            logger.error(f"Failed to download video for challenge {challenge['challenge_id']}")
+            logger.error(f"Failed to download video for challenge {challenge['challenge_id']} skipping")
+            db_manager.mark_responses_failed(challenge['challenge_id'])
             return
 
         # Get pending responses

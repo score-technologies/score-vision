@@ -121,7 +121,8 @@ class GSRValidator:
                     logger.error(f"All download attempts failed: {str(e)}")
                     if 'path' in locals() and path.exists():
                         path.unlink()
-                    raise ValueError(f"Failed to download: {str(e)}")
+                    logger.warning(f"Failed to download: {str(e)}")
+                    return None
 
 
     async def validate_keypoints(self, frames: dict, video_width: int, video_height: int) -> dict:
