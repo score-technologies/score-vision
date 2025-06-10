@@ -2,13 +2,14 @@
 import asyncio
 import os
 import time
+import random
 from datetime import datetime, timezone
 from multiprocessing import Process
 from validator.challenge.send_challenge import send_challenge
 from validator.challenge.challenge_types import GSRChallenge, ChallengeType, ChallengeTask
 from validator.utils.api import get_next_challenge
 from validator.utils.async_utils import AsyncBarrier
-from validator.config import CHALLENGE_INTERVAL, CHALLENGE_TIMEOUT
+from validator.config import CHALLENGE_INTERVAL, CHALLENGE_TIMEOUT, MAX_MINERS
 from validator.db.operations import DatabaseManager
 from validator.evaluation.evaluation import GSRValidator
 from fiber.chain.interface import get_substrate
@@ -26,7 +27,6 @@ def start_challenge_sender():
 async def run_challenge_loop():
     from validator.main import (
         get_active_nodes_with_stake,
-        get_available_nodes,
         construct_server_address,
         process_challenge_results,
         )
@@ -51,13 +51,14 @@ async def run_challenge_loop():
             try:
                 logger.info("Fetching active nodes...")
                 nodes = get_active_nodes_with_stake()
-                available_nodes = await get_available_nodes(nodes, client, db_manager, hotkey.ss58_address)
 
-                if len(available_nodes) == 0:
-                    logger.warning("No available nodes. Sleeping...")
+                if len(nodes) == 0:
+                    logger.warning("No nodes. Sleeping...")
                     await asyncio.sleep(CHALLENGE_INTERVAL.total_seconds())
                     continue
-
+                    
+                selected_nodes = random.sample(nodes, min(MAX_MINERS, len(nodes)))
+                
                 challenge_data = await get_next_challenge(hotkey.ss58_address)
                 if not challenge_data:
                     logger.warning("No challenge from API. Sleeping...")
@@ -65,10 +66,10 @@ async def run_challenge_loop():
                     continue
 
                 logger.info(f"Fetched challenge {challenge_data['task_id']}")
-                barrier = AsyncBarrier(parties=len(available_nodes))
+                barrier = AsyncBarrier(parties=len(selected_nodes))
                 new_challenge_tasks = []
 
-                for node in available_nodes:
+                for node in selected_nodes:
                     challenge = GSRChallenge(
                         challenge_id=challenge_data['task_id'],
                         type=ChallengeType.GSR,
