@@ -230,7 +230,6 @@ async def evaluate_pending_responses(
                 logger.info(f"Response {response_id} scoring details:")
                 logger.info(f"  - Quality score: {score_data['quality_score']:.3f}")
                 logger.info(f"  - Speed score: {score_data['speed_score']:.3f}")
-                logger.info(f"  - Availability score: {score_data['availability_score']:.3f}")
                 logger.info(f"  - Final score: {score_data['final_score']:.3f}")
                 
                 # Update response with score and evaluation status
@@ -248,7 +247,6 @@ async def evaluate_pending_responses(
                     validator_hotkey=validator.validator_hotkey,
                     miner_hotkey=miner_hotkey,
                     node_id=int(node_id),
-                    availability_score=score_data['availability_score'],
                     speed_score=score_data['speed_score'],
                     total_score=score_data['final_score']
                 )
@@ -263,7 +261,6 @@ async def evaluate_pending_responses(
                     response_data=json.dumps(score_data['task_returned_data']),
                     evaluation_score=score_data['quality_score'],
                     speed_score=score_data['speed_score'],
-                    availability_score=score_data['availability_score'],
                     total_score=score_data['final_score'],
                     processing_time=score_data['processing_time'],
                     started_at=(score_data['started_at']),
