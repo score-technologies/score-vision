@@ -190,7 +190,6 @@ class DatabaseManager:
         validator_hotkey: str,
         miner_hotkey: str,
         node_id: int,
-        availability_score: float,
         speed_score: float,
         total_score: float
     ) -> None:
@@ -202,8 +201,8 @@ class DatabaseManager:
             cursor.execute("""
                 INSERT INTO response_scores (
                     response_id, challenge_id, evaluation_score, validator_hotkey,
-                    miner_hotkey, node_id, availability_score, speed_score, total_score, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    miner_hotkey, node_id, speed_score, total_score, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 response_id,
                 challenge_id,
@@ -211,7 +210,6 @@ class DatabaseManager:
                 validator_hotkey,
                 miner_hotkey,
                 node_id,
-                availability_score,
                 speed_score,
                 total_score,
                 datetime.utcnow()
@@ -295,7 +293,6 @@ class DatabaseManager:
             r.miner_hotkey,
             AVG(rs.evaluation_score) as performance_score,
             AVG(rs.speed_score) as speed_score,
-            AVG(rs.availability_score) as availability_score,
             AVG(r.processing_time) as avg_processing_time,
             COUNT(*) as response_count,
             AVG(rs.total_score) as final_score,
@@ -324,7 +321,6 @@ class DatabaseManager:
                     'miner_hotkey': row[1],
                     'performance_score': row[2],
                     'speed_score': row[3],
-                    'availability_score': row[4],
                     'avg_processing_time': row[5],
                     'response_count': row[6],
                     'final_score': row[7],
@@ -342,10 +338,9 @@ class DatabaseManager:
             r.miner_hotkey,
             AVG(rs.evaluation_score) as performance_score,
             AVG(rs.speed_score) as speed_score,
-            AVG(rs.availability_score) as availability_score,
             AVG(r.processing_time) as avg_processing_time,
             COUNT(*) as response_count,
-            AVG(rs.speed_score * 0.3 + rs.evaluation_score * 0.6 + rs.availability_score * 0.1) as final_score,
+            AVG(rs.speed_score * 0.35 + rs.evaluation_score * 0.65) as final_score,
             MAX(r.received_at) as last_active
         FROM responses r
         JOIN response_scores rs ON r.response_id = rs.response_id
@@ -371,7 +366,6 @@ class DatabaseManager:
                     'miner_hotkey': row[1],
                     'performance_score': row[2],
                     'speed_score': row[3],
-                    'availability_score': row[4],
                     'avg_processing_time': row[5],
                     'response_count': row[6],
                     'final_score': row[7],
@@ -398,16 +392,6 @@ class DatabaseManager:
                 return dict(row)
             return None
 
-    def update_miner_availability(self, miner_hotkey: str, node_id: int, is_available: bool = True) -> None:
-        """Record a new availability check for a miner"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO miner_availability
-                (miner_hotkey, node_id, is_available)
-                VALUES (?, ?, ?)
-            """, (miner_hotkey, node_id, is_available))
-            conn.commit()
 
     def get_frame_evaluations(
         self,
@@ -693,21 +677,6 @@ class DatabaseManager:
             conn.close()
 
 
-    def get_availability_score(self, node_id: int) -> float:
-        """Get availability score for a node over the last 24 hours"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                SELECT COUNT(CASE WHEN is_available THEN 1 END) * 1.0 / COUNT(*) as availability_score
-                FROM availability_checks
-                WHERE node_id = ? AND checked_at >= datetime('now', '-24 hours')
-            """, (node_id,))
-            row = cursor.fetchone()
-            return float(row[0]) if row and row[0] is not None else 0.0
-        finally:
-            conn.close()
 
     async def create_challenge(self, video_url: str, external_task_id: int) -> Optional[int]:
         """
@@ -761,75 +730,7 @@ class DatabaseManager:
         finally:
             conn.close()
 
-    def log_availability_check(
-        self,
-        node_id: int,
-        hotkey: str,
-        is_available: bool,
-        response_time_ms: float,
-        error: Optional[str] = None
-    ) -> None:
-        """Log an availability check for a miner with enhanced error handling."""
-        try:
-            query = """
-            INSERT INTO availability_checks
-            (node_id, hotkey, checked_at, is_available, response_time_ms, error)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """
-            with self.conn:
-                self.conn.execute(
-                    query,
-                    (node_id, hotkey, datetime.utcnow(), is_available, response_time_ms, error)
-                )
 
-            # Log the result
-            status = "available" if is_available else "unavailable"
-            error_msg = f" (Error: {error})" if error else ""
-            logger.info(f"Node {node_id} ({hotkey}) is {status} - Response time: {response_time_ms:.2f}ms{error_msg}")
-
-        except Exception as e:
-            logger.error(f"Failed to log availability check for node {node_id}: {str(e)}")
-            # Don't raise the exception - we don't want availability logging to break the main flow
-
-    def get_recent_availability(
-        self,
-        node_id: int,
-        minutes: int = 5
-    ) -> List[Dict[str, Any]]:
-        """Get recent availability checks for a node."""
-        query = """
-        SELECT * FROM availability_checks
-        WHERE node_id = ?
-        AND checked_at >= datetime('now', ?)
-        ORDER BY checked_at DESC
-        """
-        with self.conn:
-            cursor = self.conn.execute(query, (node_id, f'-{minutes} minutes'))
-            return [dict(row) for row in cursor.fetchall()]
-
-    def get_availability_stats(
-        self,
-        node_id: int,
-        hours: int = 24
-    ) -> Dict[str, Any]:
-        """Get availability statistics for a node."""
-        query = """
-        SELECT
-            COUNT(*) as total_checks,
-            SUM(CASE WHEN is_available = 1 THEN 1 ELSE 0 END) as available_count,
-            AVG(CASE WHEN is_available = 1 THEN response_time_ms ELSE NULL END) as avg_response_time
-        FROM availability_checks
-        WHERE node_id = ?
-        AND checked_at >= datetime('now', ?)
-        """
-        with self.conn:
-            cursor = self.conn.execute(query, (node_id, f'-{hours} hours'))
-            stats = dict(cursor.fetchone())
-            stats['availability_rate'] = (
-                stats['available_count'] / stats['total_checks']
-                if stats['total_checks'] > 0 else 0
-            )
-            return stats
 
     def cleanup_old_data(self, days: int = 7) -> None:
         """
