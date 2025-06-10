@@ -181,7 +181,6 @@ async def update_task_scores(
     response_data: str,
     evaluation_score: float,
     speed_score: float,
-    availability_score: float,
     total_score: float,
     processing_time: float,
     started_at: Optional[str],
@@ -199,7 +198,6 @@ async def update_task_scores(
         response_data: Response data as JSON string
         evaluation_score: Quality evaluation score
         speed_score: Speed score
-        availability_score: Availability score
         total_score: Total weighted score
         processing_time: Processing time in seconds
         started_at: ISO format timestamp string when task started
@@ -220,7 +218,6 @@ async def update_task_scores(
             "response_data": response_data_dict,
             "evaluation_score": float(evaluation_score),
             "speed_score": float(speed_score),
-            "availability_score": float(availability_score),
             "total_score": float(total_score),
             "processing_time": float(processing_time),
             "started_at": started_at,
@@ -235,7 +232,6 @@ async def update_task_scores(
         logger.info(f"  Scores:")
         logger.info(f"    - Evaluation: {evaluation_score:.3f}")
         logger.info(f"    - Speed: {speed_score:.3f}")
-        logger.info(f"    - Availability: {availability_score:.3f}")
         logger.info(f"    - Total: {total_score:.3f}")
         logger.info(f"  Timing:")
         logger.info(f"    - Processing time: {processing_time:.2f}s")
