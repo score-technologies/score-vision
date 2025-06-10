@@ -86,7 +86,6 @@ async def set_weights(
                 'final_score': 0.0,
                 'performance_score': 0.0,
                 'speed_score': 0.0,
-                'availability_score': 0.0,
                 'avg_processing_time': 0.0
             })
             final_score=score_data['final_score']
@@ -110,14 +109,12 @@ async def set_weights(
                 'final_score': 0.0,
                 'performance_score': 0.0,
                 'speed_score': 0.0,
-                'availability_score': 0.0,
                 'avg_processing_time': 0.0
             })
             logger.info(
                 f"Node {node_id} ({node.hotkey}): "
                 f"perf={score_data['performance_score']:.4f}, "
                 f"speed={score_data['speed_score']:.4f}, "
-                f"avail={score_data['availability_score']:.4f}, "
                 f"final={score_data['final_score']:.4f}, "
                 f"avg_time={score_data['avg_processing_time']:.4f}, "
                 f"weight={weight:.4f}"
