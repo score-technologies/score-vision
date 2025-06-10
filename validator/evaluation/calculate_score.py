@@ -62,14 +62,11 @@ async def calculate_score(
             else:
                 speed_score = calculate_speed_score(processing_time, min_time, max_time)
             
-            # Get availability score
-            availability_score = db_manager.get_availability_score(int(node_id))
             
             # Calculate final score
             final_score = (
-                quality_score * 0.6 +
-                speed_score * 0.3 +
-                availability_score * 0.1
+                quality_score * 0.65 +
+                speed_score * 0.35
             )
             logger.info(f"Final score for response {response_id}: {final_score}")
             
@@ -108,7 +105,6 @@ async def calculate_score(
                 'miner_hotkey': miner_hotkey,
                 'quality_score': quality_score,
                 'speed_score': speed_score,
-                'availability_score': availability_score,
                 'final_score': final_score,
                 'processing_time': float(processing_time),
                 'validation_result': result['validation_result'],
