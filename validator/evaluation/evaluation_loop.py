@@ -215,6 +215,12 @@ async def evaluate_pending_responses(
         # Calculate final scores and update DB/API
         async with httpx.AsyncClient() as client:
             scores = await calculate_score(evaluation_results, client, validator_hotkey=validator.validator_hotkey, db_manager=db_manager)
+
+            # Trier les réponses par quality_score descendant
+            sorted_responses = sorted(scores.items(), key=lambda item: item[1]["quality_score"], reverse=True)
+
+            # Récupérer les response_ids des deux meilleurs
+            top_5_response_ids = {response_id for response_id, _ in sorted_responses[:5]}
             
             # Log all scores being processed
             logger.info(f"Processing scores for {len(scores)} responses")
@@ -250,7 +256,11 @@ async def evaluate_pending_responses(
                     speed_score=score_data['speed_score'],
                     total_score=score_data['final_score']
                 )
-                
+                # Préparer le bon contenu pour l'API
+                if response_id in top_5_response_ids:
+                    data_to_send = score_data['task_returned_data']
+                else:
+                    data_to_send = {}
                 # Update external API for each response
                 update_success = await update_task_scores(
                     validator_address=validator.validator_hotkey,
@@ -258,7 +268,7 @@ async def evaluate_pending_responses(
                     challenge_id=challenge["challenge_id"],
                     miner_id=node_id,
                     miner_hotkey=score_data['miner_hotkey'],
-                    response_data=json.dumps(score_data['task_returned_data']),
+                    response_data=json.dumps(data_to_send),
                     evaluation_score=score_data['quality_score'],
                     speed_score=score_data['speed_score'],
                     total_score=score_data['final_score'],
