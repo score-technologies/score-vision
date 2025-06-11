@@ -251,7 +251,7 @@ async def update_task_scores(
                     logger.info(f"Sending API request (attempt {retry_count + 1}/{max_retries})")
                     response = await client.post(url, params=params, json=data)
                     if not response.is_success:
-                        logger.error(f"API Error Response: {response.text}")
+                        logger.error(f"API Error Response")
                     response.raise_for_status()
                     logger.info(f"Successfully updated scores for challenge {challenge_id}")
                     return True
