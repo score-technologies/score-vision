@@ -267,9 +267,9 @@ def is_touching_scoreboard_zone(bbox_dict, frame_width=1280, frame_height=720):
     x1, y1, x2, y2 = bbox_dict["bbox"]
 
     scoreboard_top = 0
-    scoreboard_bottom = 100
+    scoreboard_bottom = 120
     scoreboard_left = 0
-    scoreboard_right_left = 500
+    scoreboard_right_left = 600
     scoreboard_right_right = frame_width
     scoreboard_right_left_start = frame_width - 500
 
