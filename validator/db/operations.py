@@ -201,8 +201,8 @@ class DatabaseManager:
             cursor.execute("""
                 INSERT INTO response_scores (
                     response_id, challenge_id, evaluation_score, validator_hotkey,
-                    miner_hotkey, node_id, speed_score, total_score, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    miner_hotkey, node_id, availability_score, speed_score, total_score, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 response_id,
                 challenge_id,
@@ -210,6 +210,7 @@ class DatabaseManager:
                 validator_hotkey,
                 miner_hotkey,
                 node_id,
+                0.0,
                 speed_score,
                 total_score,
                 datetime.utcnow()
