@@ -143,7 +143,9 @@ async def send_challenge(
             
             try:
                 response_data = response.json()
-                
+
+                if response_data is None:
+                    response_data={"frames": {}, "processing_time": 60.0}
                 # Log essential information about the response
                 logger.info(f"Received response for challenge {challenge.challenge_id}:")
                 logger.info(f"  Processing time: {processing_time:.2f} seconds")

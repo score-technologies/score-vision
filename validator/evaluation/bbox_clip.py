@@ -267,9 +267,9 @@ def is_touching_scoreboard_zone(bbox_dict, frame_width=1280, frame_height=720):
     x1, y1, x2, y2 = bbox_dict["bbox"]
 
     scoreboard_top = 0
-    scoreboard_bottom = 100
+    scoreboard_bottom = 120
     scoreboard_left = 0
-    scoreboard_right_left = 500
+    scoreboard_right_left = 600
     scoreboard_right_right = frame_width
     scoreboard_right_left_start = frame_width - 500
 
@@ -517,6 +517,6 @@ async def evaluate_bboxes(prediction:dict, path_video:Path, n_frames:int, n_vali
         except Exception as e:
             logger.warning(f"Error while getting score from future: {e}")
 
-    average_score = sum(scores)/len(scores) if any(scores) else 0.0
+    average_score = sum(scores)/len(scores) if scores else 0.0
     logger.info(f"Average Score: {average_score:.2f} when evaluated on {len(scores)} frames")
     return max(0.0,min(1.0,round(average_score,2)))
