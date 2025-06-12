@@ -314,7 +314,7 @@ class DatabaseManager:
             for row in rows:
                 node_id = int(row[0])
                 more_recent_entry_already_exists = node_id in miner_scores and (
-                    row[8] < miner_scores[node_id]['last_active']
+                    row[7] < miner_scores[node_id]['last_active']
                 )
                 if more_recent_entry_already_exists:
                     continue
@@ -322,10 +322,10 @@ class DatabaseManager:
                     'miner_hotkey': row[1],
                     'performance_score': row[2],
                     'speed_score': row[3],
-                    'avg_processing_time': row[5],
-                    'response_count': row[6],
-                    'final_score': row[7],
-                    'last_active': row[8]
+                    'avg_processing_time': row[4],
+                    'response_count': row[5],
+                    'final_score': row[6],
+                    'last_active': row[7]
                 }
 
             logger.info(f"Fetched scores for {len(miner_scores)} miners")
@@ -359,7 +359,7 @@ class DatabaseManager:
             for row in rows:
                 node_id = int(row[0])
                 more_recent_entry_already_exists = node_id in miner_scores and (
-                    row[8] < miner_scores[node_id]['last_active']
+                    row[7] < miner_scores[node_id]['last_active']
                 )
                 if more_recent_entry_already_exists:
                     continue
@@ -367,10 +367,10 @@ class DatabaseManager:
                     'miner_hotkey': row[1],
                     'performance_score': row[2],
                     'speed_score': row[3],
-                    'avg_processing_time': row[5],
-                    'response_count': row[6],
-                    'final_score': row[7],
-                    'last_active': row[8]
+                    'avg_processing_time': row[4],
+                    'response_count': row[5],
+                    'final_score': row[6],
+                    'last_active': row[7]
                 }
 
             return miner_scores
