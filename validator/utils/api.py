@@ -219,6 +219,7 @@ async def update_task_scores(
             "evaluation_score": float(evaluation_score),
             "speed_score": float(speed_score),
             "total_score": float(total_score),
+            "availability_score": 1.0,
             "processing_time": float(processing_time),
             "started_at": started_at,
             "completed_at": completed_at
