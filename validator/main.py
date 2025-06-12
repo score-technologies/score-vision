@@ -142,7 +142,30 @@ def construct_server_address(node: Node) -> str:
         # For local development, connect via localhost
         return f"http://127.0.0.1:{node.port}"
     return f"http://{node.ip}:{node.port}"
-
+    
+async def weights_update_loop(db_manager: DatabaseManager) -> None:
+    """Run the weights update loop on WEIGHTS_INTERVAL."""
+    logger.info("Starting weights update loop")
+    consecutive_failures = 0
+    max_consecutive_failures = 3
+    
+    while True:
+        try:
+            await set_weights(db_manager)
+            consecutive_failures = 0  # Reset failure counter on success
+            logger.info(f"Weights updated successfully, sleeping for {WEIGHTS_INTERVAL}")
+            await asyncio.sleep(WEIGHTS_INTERVAL.total_seconds())
+        except Exception as e:
+            consecutive_failures += 1
+            logger.error(f"Error in weights update loop (attempt {consecutive_failures}/{max_consecutive_failures}): {str(e)}")
+            
+            if consecutive_failures >= max_consecutive_failures:
+                logger.error("Too many consecutive failures in weights update loop, waiting for longer period")
+                await asyncio.sleep(WEIGHTS_INTERVAL.total_seconds() * 2)  # Wait twice as long before retrying
+                consecutive_failures = 0  # Reset counter after long wait
+            else:
+                # Wait normal interval before retry
+                await asyncio.sleep(WEIGHTS_INTERVAL.total_seconds())
 
 async def periodic_cleanup(db_manager: DatabaseManager, interval_hours: int = 24):
     """
