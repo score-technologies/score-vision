@@ -517,6 +517,6 @@ async def evaluate_bboxes(prediction:dict, path_video:Path, n_frames:int, n_vali
         except Exception as e:
             logger.warning(f"Error while getting score from future: {e}")
 
-    average_score = sum(scores)/len(scores) if any(scores) else 0.0
+    average_score = sum(scores)/len(scores) if scores else 0.0
     logger.info(f"Average Score: {average_score:.2f} when evaluated on {len(scores)} frames")
     return max(0.0,min(1.0,round(average_score,2)))
