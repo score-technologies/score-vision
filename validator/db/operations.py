@@ -735,35 +735,40 @@ class DatabaseManager:
 
     def cleanup_old_data(self, days: int = 7) -> None:
         """
-        Remove data older than the specified number of days from various tables.
-
-        Args:
-            days: Number of days to keep data for. Default is 7.
+        Delete everything older than x days.
         """
         conn = self.get_connection()
         cursor = conn.cursor()
-
+    
         try:
-            # Define tables and their timestamp columns
+            # tables to clean by timestamp
             tables_to_clean = [
                 ("responses", "received_at"),
-                ("challenge_assignments", "completed_at"),
                 ("frame_evaluations", "created_at"),
                 ("response_scores", "created_at"),
-                ("availability_checks", "checked_at")
+                ("availability_checks", "checked_at"),
             ]
-
+    
             for table, timestamp_column in tables_to_clean:
-                query = f"""
-                DELETE FROM {table}
-                WHERE {timestamp_column} < datetime('now', '-{days} days')
-                """
-                cursor.execute(query)
-                deleted_rows = cursor.rowcount
-                logger.info(f"Deleted {deleted_rows} rows from {table} older than {days} days")
-
-            # Clean up challenges that are no longer referenced
-            cursor.execute("""
+                cursor.execute(f"""
+                    DELETE FROM {table}
+                    WHERE {timestamp_column} IS NOT NULL
+                    AND {timestamp_column} < datetime('now', '-{days} days')
+                """)
+                logger.info(f"Deleted {cursor.rowcount} rows from {table} older than {days} days")
+    
+            # delete challenge assignement
+            cursor.execute(f"""
+                DELETE FROM challenge_assignments
+                WHERE 
+                    (sent_at IS NOT NULL AND sent_at < datetime('now', '-{days} days'))
+                    OR
+                    (completed_at IS NOT NULL AND completed_at < datetime('now', '-{days} days'))
+            """)
+            logger.info(f"Deleted {cursor.rowcount} old challenge_assignments older than {days} days")
+    
+            # clanup orphan challenges
+            cursor.execute(f"""
                 DELETE FROM challenges
                 WHERE challenge_id NOT IN (
                     SELECT DISTINCT challenge_id FROM responses
@@ -772,12 +777,11 @@ class DatabaseManager:
                 )
                 AND created_at < datetime('now', '-{days} days')
             """)
-            deleted_challenges = cursor.rowcount
-            logger.info(f"Deleted {deleted_challenges} orphaned challenges older than {days} days")
-
+            logger.info(f"Deleted {cursor.rowcount} orphaned challenges older than {days} days")
+    
             conn.commit()
             logger.info(f"Database cleanup completed for data older than {days} days")
-
+    
         except Exception as e:
             conn.rollback()
             logger.error(f"Error during database cleanup: {str(e)}")
