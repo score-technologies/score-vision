@@ -265,19 +265,15 @@ def is_bbox_large_enough(bbox_dict):
 
 def is_touching_scoreboard_zone(bbox_dict, frame_width=1280, frame_height=720):
     x1, y1, x2, y2 = bbox_dict["bbox"]
-
+    
     scoreboard_top = 0
-    scoreboard_bottom = 120
+    scoreboard_bottom = 150
     scoreboard_left = 0
-    scoreboard_right_left = 600
-    scoreboard_right_right = frame_width
-    scoreboard_right_left_start = frame_width - 500
+    scoreboard_right = frame_width
 
-    intersects_top_left = not (x2 < scoreboard_left or x1 > scoreboard_right_left or y2 < scoreboard_top or y1 > scoreboard_bottom)
-
-    intersects_top_right = not (x2 < scoreboard_right_left_start or x1 > scoreboard_right_right or y2 < scoreboard_top or y1 > scoreboard_bottom)
-
-    return intersects_top_left or intersects_top_right
+    # If the bbox intersects with the top area, it's out of bounds
+    intersects_top = not (x2 < scoreboard_left or x1 > scoreboard_right or y2 < scoreboard_top or y1 > scoreboard_bottom)
+    return intersects_top
     
 def evaluate_frame(
     frame_id:int,
