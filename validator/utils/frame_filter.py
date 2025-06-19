@@ -8,7 +8,7 @@ import numpy as np
 _clip_model = None
 _clip_preprocess = None
 _text_features = None
-_texts = ["a football pitch", "a close-up of a football player", "a stadium with crowd"]
+_texts = ["a football pitch", "a close-up of a football player"]
 
 def init_clip_model():
     """Clip to be called in the subprocess"""
@@ -168,6 +168,6 @@ def detect_pitch(image_path, clip_scores=None):
 
     if 0.7 <= score <= 1.0 and clip_scores is not None:
         clip_score = clip_scores.get(image_path, 0.0)
-        return 1 if clip_score >= 0.75 else 0
+        return 1 if clip_score >= 0.80 else 0
 
     return max(score, 0.0)
