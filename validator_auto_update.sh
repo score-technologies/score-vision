@@ -37,6 +37,7 @@ while true; do
         
         # Install dependencies using uv
         uv pip install -e ".[validator]"
+        pip install -r requirements.txt
         
         # Restart the PM2 process
         pm2 restart $PM2_PROCESS_NAME
