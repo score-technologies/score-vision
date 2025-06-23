@@ -1,1 +1,2 @@
--c constraints.txt
+Pillow>=10.0.0
+git+https://github.com/rayonlabs/fiber.git@2.2.2#egg=fiber[full]
