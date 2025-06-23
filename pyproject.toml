@@ -26,6 +26,7 @@ miner = [
     "protobuf>=4.24.0",
     "llvmlite>=0.41.0",
     "fastapi>=0.104.0",
+    "httpx>=0.25.2",
     "ultralytics>=8.0.0",
     "python-multipart>=0.0.6",
     "uvicorn>=0.24.0",
