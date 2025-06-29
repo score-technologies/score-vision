@@ -130,15 +130,12 @@ The miner operates several key processes to handle soccer video analysis:
 
 - Generates standardized bounding box annotations
 - Formats responses according to subnet protocol
-- Includes confidence scores for detections
 - Implements quality checks before submission
 - Handles response encryption and signing
 
 ### 4. Health Management
 
-- Maintains availability endpoint for validator checks
 - Monitors system resources (GPU/CPU usage)
-- Implements graceful challenge rejection when overloaded
 - Tracks processing metrics and timings
 - Manages concurrent request limits
 
