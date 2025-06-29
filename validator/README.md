@@ -101,11 +101,7 @@ The validator operates several key processes to manage the subnet:
 
 - Processes stored responses in batches
 - Uses random frames from the challenges
-- Uses GPT-4o to validate frame annotations:
-  - Player detection accuracy
-  - Goalkeeper identification
-  - Referee detection
-  - Ball tracking
+- Uses CLIP for bbox validation and homography techniques for keypoints
 - Calculates frame-level scores
 - Stores evaluation results
 
@@ -113,9 +109,8 @@ The validator operates several key processes to manage the subnet:
 
 - Aggregates recent evaluation scores
 - Calculates miner performance metrics:
-  - Evaluation accuracy (60%)
-  - Availability (30%)
-  - Response speed (10%)
+  - Evaluation accuracy (65%)
+  - Response speed (35%)
 - Updates miner weights on-chain
 - Manages reward distribution
 
