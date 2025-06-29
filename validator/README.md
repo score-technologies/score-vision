@@ -91,7 +91,6 @@ The validator operates several key processes to manage the subnet:
 
 ### 2. Response Evaluation
 
-- Processes miner responses using GPT-4
 - Validates detection accuracy and completeness
 - Calculates performance scores
 - Manages evaluation queues
@@ -105,7 +104,7 @@ The validator operates several key processes to manage the subnet:
 - Calculates frame-level scores
 - Stores evaluation results
 
-### 4. Weight Setting Loop (Every 21 minutes)
+### 4. Weight Setting Loop (Every 30 minutes)
 
 - Aggregates recent evaluation scores
 - Calculates miner performance metrics:
@@ -149,8 +148,7 @@ LOG_LEVEL=DEBUG
 1. **OpenAI API Issues**
 
    - Verify API key is valid and has GPT-4o access
-   - Check API rate limits and quotas
-   - Monitor API response times
+
 
 2. **Network Connectivity**
 
