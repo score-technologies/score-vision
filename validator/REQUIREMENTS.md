@@ -6,16 +6,16 @@ This document outlines the system requirements for running an SN44 validator nod
 
 ### Minimum Requirements
 
-- **CPU**: 4+ cores
-- **RAM**: 8GB
+- **CPU**: 16+ cores
+- **RAM**: 32GB
 - **Storage**: 50GB SSD
 - **Network**: 100Mbps, stable connection
 - **OS**: Ubuntu 20.04+ or macOS 12+
 
 ### Recommended Requirements
 
-- **CPU**: 8+ cores
-- **RAM**: 16GB
+- **CPU**: 16+ cores
+- **RAM**: 32GB
 - **Storage**: 200GB NVMe SSD
 - **Network**: 1Gbps, stable connection
 - **OS**: Ubuntu 22.04 LTS
@@ -26,7 +26,7 @@ The validator performs several concurrent operations that influence hardware nee
 
 ### 1. Challenge Management
 
-- Distributes challenges every 5 minutes
+- Distributes challenges every 60 minutes
 - Manages concurrent connections with multiple miners
 - Requirements:
   - Stable network connection
@@ -44,16 +44,15 @@ The validator performs several concurrent operations that influence hardware nee
 
 ### 3. Response Evaluation
 
-- Processes frame evaluations using OpenAI's GPT-4o
-- Manages concurrent API requests
+- Processes frame evaluations using OpenAI's CLIP and homography techniques
 - Requirements:
   - Stable internet connection
   - RAM for response processing
-  - Fast CPU for preprocessing
+  - Fast CPU for preprocessing and processing
 
 ### 4. Weight Management
 
-- Updates weights every 21 minutes
+- Updates weights every 30 minutes
 - Maintains subnet state
 - Requirements:
   - Reliable network connection
@@ -73,10 +72,10 @@ The validator performs several concurrent operations that influence hardware nee
 
 - **Challenge Distribution**: ~100MB per concurrent challenge
 - **Response Processing**: ~500MB per concurrent response
-- **Evaluation**: ~500MB for processing
+- **Evaluation**: ~2GB for processing
 - **Database Operations**: ~500MB
 - **System Operations**: ~1GB
-- **Total Active**: 4-8GB typical usage
+- **Total Active**: 8-10GB typical usage
 
 ### Network Requirements
 
@@ -97,15 +96,15 @@ The validator performs several concurrent operations that influence hardware nee
 
 ### Minimum Viable Setup
 
-- **CPU**: AMD Ryzen 5 or Intel i5 (6+ cores)
-- **RAM**: 16GB DDR4
+- **CPU**: AMD Ryzen 5 or Intel i5 (8+ cores)
+- **RAM**: 32GB DDR4
 - **Storage**: 200GB SSD
 - **Network**: 100Mbps stable connection
 
 ### Development/Testing
 
-- **CPU**: 4+ cores
-- **RAM**: 8GB
+- **CPU**: 8+ cores
+- **RAM**: 32GB
 - **Storage**: 50GB SSD
 - **Network**: Standard broadband
 
@@ -120,7 +119,6 @@ The validator performs several concurrent operations that influence hardware nee
 ### Operating Costs
 
 - **Network**: 500GB-1TB bandwidth monthly
-- **API**: OpenAI GPT-4o usage (~$0.01 per evaluation)
 - **Storage**: Growing at ~1.5GB per day
 - **Backup**: Consider additional storage costs
 
