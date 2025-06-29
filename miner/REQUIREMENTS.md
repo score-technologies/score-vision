@@ -1,5 +1,8 @@
 # SN44 Miner System Requirements
 
+# NOTE: 
+This benchmark is a basic reference intended to help newcomers get started. It is by no means a reliable indicator of competitiveness on the subnet and is significantly outdated.
+
 This document outlines the minimum and recommended system requirements for running an SN44 miner node, along with performance expectations for different hardware configurations.
 
 ## System Requirements
