@@ -207,6 +207,15 @@ async def update_task_scores(
         bool: True if successful, False otherwise
     """
     try:
+        # Load the hotkey for authentication
+        keypair = load_hotkey_keypair(WALLET_NAME, HOTKEY_NAME)
+        
+        # Generate nonce (current time in nanoseconds)
+        nonce = str(int(time.time() * 1e9))
+        
+        # Sign the nonce
+        signature = sign_message(keypair, nonce)
+        
         # Parse response data
         response_data_dict = json.loads(response_data)
         
@@ -241,7 +250,14 @@ async def update_task_scores(
         
         # Make request with retries
         url = f"{SCORE_VISION_API}/api/tasks/update"
-        params = {"validator_hotkey": validator_address}
+        
+        # Prepare authentication parameters
+        params = {
+            "validator_hotkey": validator_address,
+            "signature": signature,
+            "nonce": nonce,
+            "netuid": NETUID
+        }
         
         max_retries = 3
         retry_count = 0
