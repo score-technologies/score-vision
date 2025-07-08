@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import random
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, List
@@ -255,10 +256,14 @@ async def get_next_challenge_with_retry(hotkey: str, max_retries: int = 2, initi
     logger.warning("Failed to fetch challenge after all retry attempts")
     return None
 
+
+
 async def main():
     """Main validator loop."""
     # Load configuration
     load_dotenv()
+    
+    logger.info(f"Using database path: {DB_PATH}")
     
     # Get environment variables
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

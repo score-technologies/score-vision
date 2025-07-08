@@ -46,7 +46,9 @@ CHALLENGE_TIMEOUT = timedelta(minutes=4)
 WEIGHTS_INTERVAL = timedelta(minutes=30)
 VALIDATION_DELAY = timedelta(minutes=5)
 
-DB_PATH = Path("validator.db")
+# Database configuration with environment variable support
+DB_PATH = Path(os.getenv("DB_PATH", "validator.db"))
+
 # Log initial configuration
 import logging
 logger = logging.getLogger(__name__)
