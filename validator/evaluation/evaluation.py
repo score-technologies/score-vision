@@ -125,7 +125,7 @@ class GSRValidator:
                     return None
 
 
-    async def validate_keypoints(self, frames: dict, video_width: int, video_height: int) -> dict:
+    async def validate_keypoints(self, frames: dict,video_path, video_width: int, video_height: int, frames_to_validate, pitch_lines_by_frame: dict) -> dict:
         """
         Uses the advanced scoring system for keypoints.
         Returns per-frame keypoint scores and stats.
@@ -144,16 +144,22 @@ class GSRValidator:
                 large_jumps,
                 transitions,
                 avg_keypoint_stability,
-                avg_homography_stability,
-                avg_player_plausibility
-            ) = process_input_file(frames, video_width, video_height)
+                avg_player_plausibility,
+                mean_on_line, 
+                mean_inside, 
+                mean_scale, 
+                scale_valid
+            ) = process_input_file(frames,video_path, video_width, video_height, frames_to_validate, pitch_lines_by_frame)
     
             final_score = calculate_final_score_keypoints(
                 avg_keypoint_score,
                 player_score,
                 avg_keypoint_stability,
-                avg_homography_stability,
-                avg_player_plausibility
+                avg_player_plausibility,
+                mean_on_line, 
+                mean_inside, 
+                mean_scale, 
+                scale_valid
             )
     
             return {
@@ -162,9 +168,9 @@ class GSRValidator:
                 "components": {
                     "avg_keypoint_score": avg_keypoint_score,
                     "player_score": player_score,
-                    "avg_keypoint_stability": avg_keypoint_stability,
-                    "avg_homography_stability": avg_homography_stability,
-                    "avg_player_plausibility": avg_player_plausibility
+                    "scale": (mean_scale+scale_valid)/2 ,
+                    "mean_inside": mean_inside,
+                    "mean_on_line": mean_on_line
                 }
             }
     
@@ -191,8 +197,11 @@ class GSRValidator:
         response: GSRResponse,
         challenge: GSRChallenge,
         video_path: Path,
+        video_width: int,
+        video_height: int,
         frames_to_validate: List[int] = None,
-        selected_frames_id_bbox: List[int] = None
+        selected_frames_id_bbox: List[int] = None,
+        pitch_lines_by_frame: dict = None
     ) -> ValidationResult:
 
         temp_frames=response.frames
@@ -208,7 +217,7 @@ class GSRValidator:
             str(k): v for k, v in temp_frames.items() if int(k) in frames_to_validate
         }
         # Analyse keypoints (globale)
-        scoring_result = await self.validate_keypoints(filtered_frames, 1280, 720)
+        scoring_result = await self.validate_keypoints(filtered_frames, video_path, video_width, video_height,frames_to_validate, pitch_lines_by_frame)
         per_frame_keypoints = scoring_result.get("per_frame_scores", {})
         keypoints_final_score = scoring_result.get("final_score", 0.0)/100
 

@@ -8,7 +8,7 @@ import numpy as np
 _clip_model = None
 _clip_preprocess = None
 _text_features = None
-_texts = ["a football pitch", "a close-up of a football player", "a stadium with crowd"]
+_texts = ["a football pitch", "a close-up of a football player"]
 
 def init_clip_model():
     """Clip to be called in the subprocess"""

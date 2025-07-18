@@ -16,6 +16,7 @@ from transformers import CLIPProcessor, CLIPModel
 from cv2 import VideoCapture
 from torch import no_grad
 import torch
+import numpy as np
 
 SCALE_FOR_CLIP = 4.0
 FRAMES_PER_VIDEO = 750
@@ -475,9 +476,7 @@ async def evaluate_bboxes(prediction:dict, path_video:Path, n_frames:int, n_vali
         k=min(n_frames,len(frames_ids_which_can_be_validated))
     )
 
-    if len(frame_ids_to_evaluate)/n_valid<0.7:
-        logger.warning(f"Only having {len(frame_ids_to_evaluate)} which is not enough for the threshold")
-        return 0.0
+    scale_valid =  np.clip((len(frame_ids_to_evaluate)/n_valid) / 0.7, 0, 1)
         
     if not any(frame_ids_to_evaluate):
         logger.warning("""
@@ -514,5 +513,6 @@ async def evaluate_bboxes(prediction:dict, path_video:Path, n_frames:int, n_vali
             logger.warning(f"Error while getting score from future: {e}")
 
     average_score = sum(scores)/len(scores) if scores else 0.0
+    average_score = min(1.0,average_score) * scale_valid
     logger.info(f"Average Score: {average_score:.2f} when evaluated on {len(scores)} frames")
     return max(0.0,min(1.0,round(average_score,2)))

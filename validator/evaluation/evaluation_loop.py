@@ -20,6 +20,7 @@ import cv2
 import tempfile
 from dataclasses import dataclass
 from validator.utils.frame_filter import (detect_pitch, batch_clip_verification, init_clip_model)
+from validator.evaluation.keypoint_scoring import detect_pitch_lines_tophat
 
 # New constant for minimum number of players
 MIN_PLAYERS_PER_FRAME = 4
@@ -142,12 +143,16 @@ async def evaluate_pending_responses(
         # Select frames for this challenge
         frame_paths = []
         frame_indices = []
+        pitch_lines_by_frame = {}
+        
         video_cap = cv2.VideoCapture(str(video_path))
         for idx in range(int(video_cap.get(cv2.CAP_PROP_FRAME_COUNT))):
             video_cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             success, frame = video_cap.read()
             if not success:
                 continue
+            _, _, _, _, _, final_kept = detect_pitch_lines_tophat(frame)
+            pitch_lines_by_frame[str(idx)] = final_kept
             tmp_path = Path(tempfile.gettempdir()) / f"frame_{challenge['challenge_id']}_{idx}.jpg"
             cv2.imwrite(str(tmp_path), frame)
             frame_paths.append(str(tmp_path))
@@ -161,6 +166,9 @@ async def evaluate_pending_responses(
             score = detect_pitch(path, clip_scores=clip_scores)
             if score == 1:
                 frames.append(frame_indices[i])
+                
+        video_width = int(video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        video_height = int(video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         video_cap.release()
         
         if len(frames)<75:
@@ -186,8 +194,11 @@ async def evaluate_pending_responses(
                         video_url=challenge["video_url"]
                     ),
                     video_path=video_path,
+                    video_width=video_width,
+                    video_height=video_height,
                     frames_to_validate=frames,
-                    selected_frames_id_bbox=selected_frames_id_bbox
+                    selected_frames_id_bbox=selected_frames_id_bbox,
+                    pitch_lines_by_frame=pitch_lines_by_frame
                 )
                 if result:
                     started_at=db_manager.get_challenge_assignment_sent_at(challenge['challenge_id'], response.miner_hotkey)

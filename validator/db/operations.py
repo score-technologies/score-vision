@@ -341,7 +341,7 @@ class DatabaseManager:
             AVG(rs.speed_score) as speed_score,
             AVG(r.processing_time) as avg_processing_time,
             COUNT(*) as response_count,
-            AVG(rs.speed_score * 0.35 + rs.evaluation_score * 0.65) as final_score,
+            AVG(rs.total_score) as final_score,
             MAX(r.received_at) as last_active
         FROM responses r
         JOIN response_scores rs ON r.response_id = rs.response_id
