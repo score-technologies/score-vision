@@ -24,18 +24,30 @@ def preprocess_keypoints(keypoints):
     """
     return np.array(keypoints).reshape(-1, 2)
 
-def get_valid_keypoints(keypoints):
+def get_valid_keypoints(keypoints, image_width=None, image_height=None):
     """
-    Get valid keypoints (non-zero coordinates) while maintaining their original indices.
-    
+    Get valid keypoints (non-zero and optionally inside image bounds), with original indices.
+
     Parameters:
-    keypoints (np.ndarray): Array of keypoint coordinates.
-    
+    keypoints (np.ndarray): Array of keypoint coordinates, shape (N, 2)
+    image_width (int or None): Optional image width to clip to
+    image_height (int or None): Optional image height to clip to
+
     Returns:
-    np.ndarray: Valid keypoints.
-    np.ndarray: Indices of valid keypoints.
+    valid_kps (np.ndarray): Filtered keypoints
+    valid_indices (np.ndarray): Indices of valid keypoints in original array
     """
+    # mask for non-zero points
     valid_mask = ~(np.all(keypoints == 0, axis=1))
+
+    # if bounds provided, add condition
+    if image_width is not None and image_height is not None:
+        in_bounds_mask = (
+            (keypoints[:, 0] >= 0) & (keypoints[:, 0] < image_width) &
+            (keypoints[:, 1] >= 0) & (keypoints[:, 1] < image_height)
+        )
+        valid_mask &= in_bounds_mask
+
     valid_indices = np.where(valid_mask)[0]
     return keypoints[valid_mask], valid_indices
 
@@ -87,7 +99,7 @@ def estimate_homography_ransac(keypoints, video_width, video_height, ransac_thre
     scaled_pitch_vertices = pitch_vertices * np.array([scale_x, scale_y])
 
     # Get valid keypoints and their indices
-    valid_keypoints, valid_indices = get_valid_keypoints(keypoints)
+    valid_keypoints, valid_indices = get_valid_keypoints(keypoints, video_width, video_height)
 
     # Ensure at least 4 valid points are available.
     if valid_keypoints.shape[0] < 4:
@@ -466,12 +478,236 @@ def calculate_keypoint_score(inlier_ratio, avg_reprojection_error):
     reprojection_score = max(0, 100 - avg_reprojection_error)  # Inverse scale, lower is better
     return (inlier_score + reprojection_score) / 2
 
-def process_input_file(input_file, video_width, video_height):
+def is_bbox_large_enough(bbox_dict, min_width=15, min_height=40) -> bool:
+    x1, y1, x2, y2 = bbox_dict["bbox"]
+    w, h = x2 - x1, y2 - y1
+    if bbox_dict.get("class_id") == 0:  # FOOTBALL
+        return True
+    return w >= min_width and h >= min_height
+
+def is_touching_scoreboard_zone(bbox_dict, frame_width=1280, frame_height=720) -> bool:
+    x1, y1, x2, y2 = bbox_dict["bbox"]
+    return not (x2 < 0 or x1 > frame_width or y2 < 0 or y1 > 150)
+
+def filter_valid_bboxes_for_keypoints(objects: list, frame_width=1280, frame_height=720) -> list:
+    """
+    Filters bboxes based on minimum size and scoreboard exclusion zone.
+    Same logic as in the bbox_clip evaluation pipeline.
+    """
+    return [
+        obj for obj in objects
+        if is_bbox_large_enough(obj) and not is_touching_scoreboard_zone(obj, frame_width, frame_height)
+    ]
+
+def keypoint_on_line(u, v, line_mask, tol=3):
+    h, w = line_mask.shape
+    x0, y0 = int(round(u)), int(round(v))
+    x1, y1 = max(0, x0 - tol), max(0, y0 - tol)
+    x2, y2 = min(w-1, x0 + tol), min(h-1, y0 + tol)
+    return np.any(line_mask[y1:y2+1, x1:x2+1] > 0)
+
+
+def filter_by_density(kept, radius=80, max_neighbors=80):
+    mids = [((x1+x2)/2, (y1+y2)/2) for x1,y1,x2,y2 in kept]
+    filtered = []
+    for i, (x1,y1,x2,y2) in enumerate(kept):
+        mx, my = mids[i]
+        cnt = sum(1 for ux,uy in mids if abs(ux-mx)<radius and abs(uy-my)<radius)
+        if cnt <= max_neighbors:
+            filtered.append((x1,y1,x2,y2))
+    return filtered
+
+def line_on_mask(x1, y1, x2, y2, mask, samples=20):
+    for t in np.linspace(0, 1, samples):
+        x = int(x1 + (x2 - x1) * t)
+        y = int(y1 + (y2 - y1) * t)
+        if mask[y, x] == 0:
+            return False
+    return True
+
+def detect_pitch_lines_tophat(frame, border_ignore=3):
+    h, w = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # 1) basic grass mask
+    hsv   = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    grass = cv2.inRange(hsv, (35,40,40), (85,255,255))
+    grass = cv2.morphologyEx(grass, cv2.MORPH_OPEN, np.ones((5,5), np.uint8))
+
+    # 2)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (31,31))
+    tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
+    _, white_lines = cv2.threshold(tophat, 30, 255, cv2.THRESH_BINARY)
+
+    # 3) restriction to grass
+    masked = cv2.bitwise_and(white_lines, grass)
+
+    # 4) Canny + HoughP
+    blur  = cv2.GaussianBlur(masked, (5,5), 0)
+    edges = cv2.Canny(blur, 30, 100)
+    lines = cv2.HoughLinesP(edges,
+                            rho=1,
+                            theta=np.pi/360,
+                            threshold=30,
+                            minLineLength=10,
+                            maxLineGap=15)
+
+    # 5) only grass segments
+    line_mask  = np.zeros_like(gray)
+    kept_lines = []
+    if lines is not None:
+        for x1,y1,x2,y2 in lines[:,0]:
+            if line_on_mask(x1,y1,x2,y2, grass, samples=30):
+                cv2.line(line_mask, (x1,y1), (x2,y2), 255, 2)
+                kept_lines.append((x1,y1,x2,y2))
+
+    # 6) get rid of borders
+    line_mask[:border_ignore, :] = 0
+    line_mask[-border_ignore:, :] = 0
+    line_mask[:, :border_ignore] = 0
+    line_mask[:, -border_ignore:] = 0
+
+
+    # 7) final list reconstruction
+    final_kept = []
+    for x1,y1,x2,y2 in kept_lines:
+        mx, my = (x1+x2)//2, (y1+y2)//2
+        if 0 <= mx < w and 0 <= my < h and line_mask[my,mx] > 0:
+            final_kept.append((x1,y1,x2,y2))
+
+    final_kept = filter_by_density(final_kept,
+                                   radius=80,
+                                   max_neighbors=80)
+
+    return grass, white_lines, masked, edges, line_mask, final_kept
+
+
+def point_to_segment_dist(px, py, x1, y1, x2, y2):
+    # vectors
+    vx, vy = x2 - x1, y2 - y1
+    wx, wy = px - x1, py - y1
+    # scalar projection w·v / |v|²
+    t = (wx*vx + wy*vy) / float(vx*vx + vy*vy)
+    t = max(0, min(1, t)) 
+    # projected point
+    projx = x1 + t*vx
+    projy = y1 + t*vy
+    # euclidian distance
+    return np.hypot(px - projx, py - projy)
+
+def keypoint_on_line_segments(u, v, segments, tol=3):
+    for x1,y1,x2,y2 in segments:
+        if point_to_segment_dist(u, v, x1, y1, x2, y2) <= tol:
+            return True
+    return False
+
+def mean_keypoint_to_line_distance_score(keypoints, line_segments, video_width, video_height):
+    """
+    Gives a score between 0 and 1 based on average proximity to pitch lines
+    """
+    valid_kps, _ = get_valid_keypoints(keypoints, video_width, video_height)
+    if len(valid_kps) == 0:
+        return 0.5 
+
+    if not line_segments:
+        return 0
+    norm_kps = valid_kps / np.array([video_width, video_height])
+    norm_segs = [(
+        x1 / video_width, y1 / video_height,
+        x2 / video_width, y2 / video_height
+    ) for (x1, y1, x2, y2) in line_segments]
+
+    distances = []
+    for (u, v) in norm_kps:
+        min_dist = min(point_to_segment_dist(u, v, x1, y1, x2, y2) for (x1, y1, x2, y2) in norm_segs)
+        distances.append(min_dist)
+
+    mean_dist = np.mean(distances)
+    k  = 0.0037
+    x0 = 0.02
+    score = 1.0 / (1.0 + np.exp((mean_dist - x0) / k))
+    return score
+
+def calculate_keypoint_to_player_scale_ratio(keypoints, frame_data, video_width, video_height):
+    """
+    Compare keypoints distance to object distance to see if it is logical
+
+    Args:
+        keypoints (np.ndarray): (N, 2)
+        frame_data (dict): frame data
+
+    Returns:
+        float: ratio keypoint_scale / player_dispersion
+    """
+    valid_kps, _ = get_valid_keypoints(keypoints, video_width, video_height)
+    if len(valid_kps) < 2:
+        return 1.0 
+
+    # avg distance btw keypoints
+    dists_kps = []
+    for i in range(len(valid_kps)):
+        for j in range(i + 1, len(valid_kps)):
+            dists_kps.append(np.linalg.norm(valid_kps[i] - valid_kps[j]))
+    mean_kp_dist = np.mean(dists_kps)
+
+    # get players centers
+    player_centers = []
+    valid_objects = filter_valid_bboxes_for_keypoints(
+        frame_data.get("objects", []), video_width, video_height
+    )
+    for obj in valid_objects:
+        bbox = obj["bbox"]
+        cx = (bbox[0] + bbox[2]) / 2
+        cy = (bbox[1] + bbox[3]) / 2
+        player_centers.append([cx, cy])
+
+    player_centers = np.array(player_centers)
+    if len(player_centers) < 2:
+        return 1.0 
+
+    # players dispertion
+    dists_players = []
+    for i in range(len(player_centers)):
+        for j in range(i + 1, len(player_centers)):
+            dists_players.append(np.linalg.norm(player_centers[i] - player_centers[j]))
+    mean_player_dist = np.mean(dists_players)
+
+    # Ratio
+    scale_ratio = mean_kp_dist / (mean_player_dist + 1e-6)
+
+    return scale_ratio
+
+def fraction_objects_inside(frame_data, H, config: SoccerPitchConfiguration,video_width,video_height):
+
+    # 1) exterior lines construction
+    verts = np.array(config.vertices, dtype=np.float32)
+    outer_idx = [0, 5, 29, 24] 
+    contour = verts[outer_idx].reshape(-1,1,2).astype(np.int32)
+
+    # 2) project and test
+    inside, total = 0, 0
+    valid_objects = filter_valid_bboxes_for_keypoints(
+        frame_data.get("objects", []), video_width, video_height
+    )
+    for obj in valid_objects:
+        x0,y0,x1,y1 = obj["bbox"]
+        cx, cy = (x0+x1)/2, (y0+y1)/2
+        pt_cm = cv2.perspectiveTransform(
+            np.array([[[cx, cy]]], dtype=np.float32),
+            H
+        ).reshape(-1)
+        if cv2.pointPolygonTest(contour, (pt_cm[0], pt_cm[1]), False) >= 0:
+            inside += 1
+        total += 1
+
+    return inside / total if total else 0.0
+
+def process_input_file(input_file, video_path, video_width, video_height, frames_to_validate, pitch_lines_by_frame):
     if isinstance(input_file, str): 
         with open(input_file, 'r') as f:
             data = json.load(f)
             
-    elif isinstance(input_file, dict):  # Already JSON data
+    elif isinstance(input_file, dict):
         if "frames" not in input_file:
             data = {"frames": input_file}
         else:
@@ -488,7 +724,6 @@ def process_input_file(input_file, video_width, video_height):
         
     # Convert list format to dictionary format if needed
     frames_data = data['frames']
-
     # Detect scene transitions and segment the video
     transitions, frame_to_segment = detect_scene_transitions(data['frames'])
     print(f"Detected {len(transitions)} scene transitions")
@@ -506,33 +741,58 @@ def process_input_file(input_file, video_width, video_height):
     total_inlier_ratio = 0
     total_reprojection_error = 0
     total_keypoint_score = 0
-    
+    mean_list=[]
+    mean_list_fracinside=[]
+    mean_list_scale_ratio=[]
+    valid_counter=0
+
     for frame_id, frame_data in data['frames'].items():
         keypoints = preprocess_keypoints(frame_data['keypoints'])
+        valid_kps, _ = get_valid_keypoints(keypoints, video_width, video_height)
+
         H, inlier_ratio, avg_reprojection_error = estimate_homography_ransac(keypoints, video_width, video_height)
         
         if H is not None:
-            keypoint_score = calculate_keypoint_score(inlier_ratio, avg_reprojection_error)
+            valid_counter+=1
+
+            bboxes = [obj['bbox'] for obj in frame_data.get("objects",[])]
             
+            keypoint_score = calculate_keypoint_score(inlier_ratio, avg_reprojection_error)
+
+            pitch_config = SoccerPitchConfiguration()
+            final_kept = pitch_lines_by_frame.get(frame_id, [])
+            frac_on_line = mean_keypoint_to_line_distance_score(valid_kps, final_kept, video_width, video_height)
+            frac_inside = fraction_objects_inside(frame_data, H, pitch_config,video_width,video_height)
+            scale_ratio = min(calculate_keypoint_to_player_scale_ratio(keypoints, frame_data, video_width, video_height),1.5)
             # Get segment-specific scores
             segment_id = frame_to_segment.get(frame_id, 0)
             segment_stability = stability_scores.get(segment_id, {'keypoint_stability': 1.0, 'homography_stability': 1.0})
             segment_plausibility = plausibility_scores.get(segment_id, {'plausibility_score': 1.0})
-            
             results[frame_id] = {
                 'inlier_ratio': float(inlier_ratio),
                 'avg_reprojection_error': float(avg_reprojection_error),
                 'keypoint_score': keypoint_score,
                 'segment_id': segment_id,
-                'keypoint_stability': segment_stability['keypoint_stability'],
-                'homography_stability': segment_stability['homography_stability'],
-                'player_plausibility': segment_plausibility['plausibility_score']
+                'frac_inside': frac_inside, 
+                'frac_on_line': frac_on_line,
+                'player_plausibility': segment_plausibility['plausibility_score'],
+                'keypoint_stability': segment_stability['keypoint_stability']
             }
             valid_frames += 1
             total_inlier_ratio += inlier_ratio
             total_reprojection_error += avg_reprojection_error
             total_keypoint_score += keypoint_score
-    
+            mean_list.append(frac_on_line)
+            mean_list_fracinside.append(frac_inside)
+            mean_list_scale_ratio.append(scale_ratio)
+
+
+    mean_on_line=sum(mean_list)/len(mean_list) if len(mean_list) else 1
+    mean_inside = sum(mean_list_fracinside)/len(mean_list_fracinside) if len(mean_list_fracinside) else 1
+    mean_scale = sum(mean_list_scale_ratio)/len(mean_list_scale_ratio) if len(mean_list_scale_ratio) else 1
+    mean_scale = min(mean_scale,1)
+    scale_valid =  np.clip(valid_counter / len(frames_to_validate) / 0.5, 0, 1)
+
     avg_inlier_ratio = total_inlier_ratio / valid_frames if valid_frames > 0 else 0
     avg_reprojection_error = total_reprojection_error / valid_frames if valid_frames > 0 else float('inf')
     avg_keypoint_score = total_keypoint_score / valid_frames if valid_frames > 0 else 0
@@ -542,10 +802,9 @@ def process_input_file(input_file, video_width, video_height):
     
     # Calculate average stability and plausibility scores
     avg_keypoint_stability = np.mean([r['keypoint_stability'] for r in results.values()]) if results else 0
-    avg_homography_stability = np.mean([r['homography_stability'] for r in results.values()]) if results else 0
     avg_player_plausibility = np.mean([r['player_plausibility'] for r in results.values()]) if results else 0
     
-    return results, valid_frames, avg_inlier_ratio, avg_reprojection_error, avg_keypoint_score, player_score, avg_jump, total_jumps, biggest_jump, large_jumps, transitions, avg_keypoint_stability, avg_homography_stability, avg_player_plausibility
+    return results, valid_frames, avg_inlier_ratio, avg_reprojection_error, avg_keypoint_score, player_score, avg_jump, total_jumps, biggest_jump, large_jumps, transitions, avg_keypoint_stability, avg_player_plausibility, mean_on_line, mean_inside, mean_scale, scale_valid
 
 def summarize_scores(results):
     inlier_ranges = {
@@ -579,38 +838,41 @@ def summarize_scores(results):
     
     return {'inlier_ratio': inlier_ranges, 'avg_reprojection_error': error_ranges}
 
-def calculate_final_score_keypoints(keypoint_score, player_score, keypoint_stability, homography_stability, player_plausibility):
+def calculate_final_score_keypoints(keypoint_score, player_score, keypoint_stability, player_plausibility, mean_on_line , mean_inside, mean_scale,  scale_valid):
     # Weight the different components
     weights = {
-        'keypoint_score': 0.6,
-        'player_score': 0.1,
-        'keypoint_stability': 0.1,
-        'homography_stability': 0.1,
-        'player_plausibility': 0.1
+        'keypoint_score': 0.25,
+        'mean_on_line': 0.4,
+        'keypoint_stability': 0.05,
+        'player_final_score': 0.1,
+        'mean_inside': 0.2
     }
     
     # Scale all scores to 0-100
-    keypoint_stability_score = keypoint_stability * 100
-    homography_stability_score = homography_stability * 100
-    player_plausibility_score = player_plausibility * 100
     
+    keypoint_stability_score = keypoint_stability * 100
+    player_plausibility_score = player_plausibility * 100
+    point_on_line_score = mean_on_line * 100
+    mean_inside = mean_inside * 100
+    player_final_score = (player_plausibility_score + player_score) / 2
     # Print component scores for debugging
     print(f"\nComponent Scores:")
     print(f"Keypoint Score: {keypoint_score:.2f} (weight: {weights['keypoint_score']})")
-    print(f"Player Score: {player_score:.2f} (weight: {weights['player_score']})")
+    print(f"Point on line Score: {point_on_line_score:.2f} (weight: {weights['mean_on_line']})")
+    print(f"Mean inside Score: {mean_inside:.2f} (weight: {weights['mean_inside']})")
     print(f"Keypoint Stability: {keypoint_stability_score:.2f} (weight: {weights['keypoint_stability']})")
-    print(f"Homography Stability: {homography_stability_score:.2f} (weight: {weights['homography_stability']})")
-    print(f"Player Plausibility: {player_plausibility_score:.2f} (weight: {weights['player_plausibility']})")
-    
-    # Calculate weighted score
+    print(f"Player final score: {player_final_score:.2f} (weight: {weights['player_final_score']})")
+        
+        # Calculate weighted score
     final_score = (
         weights['keypoint_score'] * keypoint_score +
-        weights['player_score'] * player_score +
+        weights['mean_on_line'] * point_on_line_score +
+        weights['mean_inside'] * mean_inside +
         weights['keypoint_stability'] * keypoint_stability_score +
-        weights['homography_stability'] * homography_stability_score +
-        weights['player_plausibility'] * player_plausibility_score
+        weights['player_final_score'] * player_final_score
     )
-    
+    final_score *= (mean_scale + scale_valid)/2
+
     return final_score
 
 def main():
