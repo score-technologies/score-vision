@@ -791,7 +791,7 @@ def process_input_file(input_file, video_path, video_width, video_height, frames
     mean_inside = sum(mean_list_fracinside)/len(mean_list_fracinside) if len(mean_list_fracinside) else 1
     mean_scale = sum(mean_list_scale_ratio)/len(mean_list_scale_ratio) if len(mean_list_scale_ratio) else 1
     mean_scale = min(mean_scale,1)
-    scale_valid =  np.clip(valid_counter / len(frames_to_validate) / 0.5, 0, 1)
+    scale_valid =  np.clip(valid_counter / len(frames_to_validate) / 0.4, 0, 1)
 
     avg_inlier_ratio = total_inlier_ratio / valid_frames if valid_frames > 0 else 0
     avg_reprojection_error = total_reprojection_error / valid_frames if valid_frames > 0 else float('inf')
