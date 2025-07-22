@@ -63,7 +63,7 @@ validator = [
     "open_clip_torch>=2.23.0",
     "transformers>=4.36.2",
     "torch>=2.2.0",
-    "async-substrate-interface==1.0.0",
+    "async-substrate-interface>=1.0.0",
     "transformers>=4.34.0",
     "accelerate>=0.24.0",
     "fiber[full] @ git+https://github.com/rayonlabs/fiber.git@2.5.0#egg=fiber",
