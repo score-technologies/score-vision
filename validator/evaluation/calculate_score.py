@@ -54,7 +54,7 @@ async def calculate_score(
                 keypoints_final_score = feedback["keypoints_final_score"]
             
             logger.info(f"bbox_score: {bbox_score}, keypoints_final_score: {keypoints_final_score}")
-            quality_score= (bbox_score*0.75) + (keypoints_final_score*0.25)
+            quality_score= (bbox_score*0.5) + (keypoints_final_score*0.5)
             
             # Calculate speed score
             if bbox_score <= 0.2 or processing_time >= MAX_PROCESSING_TIME:
@@ -125,7 +125,7 @@ def calculate_speed_score(processing_time: float, min_time: float, max_time: flo
         return 1.0  # If all times are the same, give full score
         
     # Normalize time to 0-1 range
-    normalized_time = (processing_time - min_time) / (min(max_time,MAX_PROCESSING_TIME) - min_time)
+    normalized_time = (processing_time - min_time) / (MAX_PROCESSING_TIME - min_time)
     
     # Apply exponential scaling to more aggressively reward faster times
     # Using exponential decay with base e
