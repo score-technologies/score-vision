@@ -873,6 +873,10 @@ def calculate_final_score_keypoints(keypoint_score, player_score, keypoint_stabi
     )
     final_score *= (mean_scale + scale_valid)/2
 
+    if point_on_line_score < 3:
+        print('Mean on line not high enough - returning 0')
+        final_score = 0.0
+
     return final_score
 
 def main():
