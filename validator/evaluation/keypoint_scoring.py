@@ -6,6 +6,7 @@ miner_dir = str(Path(__file__).resolve().parents[1])
 sys.path.insert(0, miner_dir)
 
 import cv2
+import math
 import numpy as np
 import json
 import argparse
@@ -702,6 +703,117 @@ def fraction_objects_inside(frame_data, H, config: SoccerPitchConfiguration,vide
 
     return inside / total if total else 0.0
 
+def compute_scene_keypoint_consistency(frames, valid_frame_ids, video_width, video_height):
+    """
+    Compute per-frame keypoint consistency (normalized) in each scene.
+    Returns scene_scores plus a length-weighted overall average.
+    """
+    if not valid_frame_ids:
+        return {}, 1.0  # neutral if nothing to score
+
+    # 1) normalize IDs to strings that actually exist in frames
+    available = set(frames.keys())
+    valid_ids_str = sorted(
+        {str(fid) for fid in valid_frame_ids if str(fid) in available},
+        key=lambda s: int(s)
+    )
+    if not valid_ids_str:
+        return {}, 1.0
+
+    # 2) break into consecutive scenes (work with ints for adjacency, keep str for indexing)
+    valid_ids_int = [int(s) for s in valid_ids_str]
+    scenes = []
+    current = [valid_ids_int[0]]
+    for prev, curr in zip(valid_ids_int, valid_ids_int[1:]):
+        if curr == prev + 1:
+            current.append(curr)
+        else:
+            scenes.append(current)
+            current = [curr]
+    scenes.append(current)
+
+    scene_scores = {}
+    total_len = 0
+    weighted_sum = 0.0
+    diag = math.hypot(video_width, video_height)
+
+    for si, scene in enumerate(scenes):
+        frame_scores = []
+        frame_data = []
+
+        for idx, fid_int in enumerate(scene):
+            fid = str(fid_int)
+
+            if idx == 0:
+                frame_scores.append(1.0)
+                frame_data.append((fid, 0, 1))
+                continue
+
+            prev_id = str(scene[idx - 1])
+            if prev_id not in frames or fid not in frames:
+                frame_scores.append(0.0)  
+                frame_data.append((fid, 1, 0))
+                continue
+            
+            previous_kpts = frames[prev_id]['keypoints']
+            current_kpts = frames[fid]['keypoints']
+
+            if len(previous_kpts) < 32:
+                previous_kpts = [[0.0, 0.0] for _ in range(32)]
+            if len(current_kpts) < 32:
+                current_kpts = [[0.0, 0.0] for _ in range(32)]
+
+            # get valid keypoints + their original indices
+            kp_prev, idx_prev = get_valid_keypoints(
+                preprocess_keypoints(previous_kpts),
+                video_width, video_height
+            )
+            kp_curr, idx_curr = get_valid_keypoints(
+                preprocess_keypoints(current_kpts),
+                video_width, video_height
+            )
+
+            # catch the case where no keyoints detected consecutively
+            prev_all_zero = all(p == [0.0, 0.0] for p in previous_kpts)
+            current_all_zero = all(p == [0.0, 0.0] for p in current_kpts)
+
+            if prev_all_zero and current_all_zero:
+                frame_scores.append(1)
+                frame_data.append((fid, 0, 1))
+                continue
+
+            # if not all zero consecutively, then compare keypoints which are similar
+            common = np.intersect1d(idx_prev, idx_curr)
+            if (len(common) == 0):
+                frame_scores.append(0)
+                frame_data.append((fid, 1, 0))
+                continue
+
+            pts_prev = np.array([kp_prev[np.where(idx_prev == i)[0][0]] for i in common])
+            pts_curr = np.array([kp_curr[np.where(idx_curr == i)[0][0]] for i in common])
+            dists = np.linalg.norm(pts_curr - pts_prev, axis=1)
+            avg_dist = float(np.mean(dists))
+
+            norm_dist = avg_dist / diag
+            k, x0 = 0.0037, 0.02
+            frame_score = 1.0 / (1.0 + np.exp((norm_dist - x0) / k))
+            frame_scores.append(frame_score)
+            frame_data.append((fid, norm_dist, frame_score))
+
+        avg_scene = float(np.mean(frame_scores)) if frame_scores else 1.0
+        L = len(frame_scores)
+        scene_scores[si] = {
+            'frame_scores': frame_scores,
+            'avg_score': avg_scene,
+            'length': L,
+            'frame_data': frame_data
+        }
+        total_len += L
+        weighted_sum += avg_scene * L
+
+    overall_weighted_avg = weighted_sum / total_len if total_len else 1.0
+    return scene_scores, overall_weighted_avg
+
 def process_input_file(input_file, video_path, video_width, video_height, frames_to_validate, pitch_lines_by_frame):
     if isinstance(input_file, str): 
         with open(input_file, 'r') as f:
@@ -720,15 +832,15 @@ def process_input_file(input_file, video_path, video_width, video_height, frames
                 # Use frame_number if available, otherwise use index
                 frame_id = str(frame_data.get('frame_number', i))
                 frames_dict[frame_id] = frame_data
-        frames_data={"frames": frames_dict}
+        data={"frames": frames_dict}
         
-    # Convert list format to dictionary format if needed
-    frames_data = data['frames']
     # Detect scene transitions and segment the video
     transitions, frame_to_segment = detect_scene_transitions(data['frames'])
     print(f"Detected {len(transitions)} scene transitions")
     print(f"Video segmented into {len(set(frame_to_segment.values()))} continuous segments")
-    
+
+    # Check keypoints consistency within valid pitch frames
+    scene_scores, kpts_stability_weighted_avg = compute_scene_keypoint_consistency(data['frames'], frames_to_validate, video_width, video_height)
     # Check keypoint stability within segments
     stability_scores = check_keypoint_stability(data['frames'], frame_to_segment, video_width, video_height)
     
@@ -804,7 +916,7 @@ def process_input_file(input_file, video_path, video_width, video_height, frames
     avg_keypoint_stability = np.mean([r['keypoint_stability'] for r in results.values()]) if results else 0
     avg_player_plausibility = np.mean([r['player_plausibility'] for r in results.values()]) if results else 0
     
-    return results, valid_frames, avg_inlier_ratio, avg_reprojection_error, avg_keypoint_score, player_score, avg_jump, total_jumps, biggest_jump, large_jumps, transitions, avg_keypoint_stability, avg_player_plausibility, mean_on_line, mean_inside, mean_scale, scale_valid
+    return results, valid_frames, avg_inlier_ratio, avg_reprojection_error, avg_keypoint_score, player_score, avg_jump, total_jumps, biggest_jump, large_jumps, transitions, avg_keypoint_stability, avg_player_plausibility, mean_on_line, mean_inside, mean_scale, scale_valid, scene_scores, kpts_stability_weighted_avg
 
 def summarize_scores(results):
     inlier_ranges = {
@@ -838,7 +950,7 @@ def summarize_scores(results):
     
     return {'inlier_ratio': inlier_ranges, 'avg_reprojection_error': error_ranges}
 
-def calculate_final_score_keypoints(keypoint_score, player_score, keypoint_stability, player_plausibility, mean_on_line , mean_inside, mean_scale,  scale_valid):
+def calculate_final_score_keypoints(keypoint_score, player_score, keypoint_stability, player_plausibility, mean_on_line , mean_inside, mean_scale,  scale_valid, kpts_stability_weighted_avg):
     # Weight the different components
     weights = {
         'keypoint_score': 0.25,
@@ -871,12 +983,8 @@ def calculate_final_score_keypoints(keypoint_score, player_score, keypoint_stabi
         weights['keypoint_stability'] * keypoint_stability_score +
         weights['player_final_score'] * player_final_score
     )
-    final_score *= (mean_scale + scale_valid)/2
-
-    if point_on_line_score < 3:
-        print('Mean on line not high enough - returning 0')
-        final_score = 0.0
-
+    final_score *= kpts_stability_weighted_avg*((mean_scale + scale_valid)/2)
+    print(f"\nFinal Score: {final_score:.2f}")
     return final_score
 
 def main():
