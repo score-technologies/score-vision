@@ -148,7 +148,9 @@ class GSRValidator:
                 mean_on_line, 
                 mean_inside, 
                 mean_scale, 
-                scale_valid
+                scale_valid,
+                scene_scores, 
+                kpts_stability_weighted_avg
             ) = process_input_file(frames,video_path, video_width, video_height, frames_to_validate, pitch_lines_by_frame)
     
             final_score = calculate_final_score_keypoints(
@@ -159,7 +161,8 @@ class GSRValidator:
                 mean_on_line, 
                 mean_inside, 
                 mean_scale, 
-                scale_valid
+                scale_valid, 
+                kpts_stability_weighted_avg
             )
     
             return {
