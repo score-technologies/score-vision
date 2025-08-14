@@ -25,32 +25,42 @@ def preprocess_keypoints(keypoints):
     """
     return np.array(keypoints).reshape(-1, 2)
 
-def get_valid_keypoints(keypoints, image_width=None, image_height=None):
+def get_valid_keypoints(keypoints, image_width=None, image_height=None, min_dist=25):
     """
     Get valid keypoints (non-zero and optionally inside image bounds), with original indices.
-
+    
     Parameters:
     keypoints (np.ndarray): Array of keypoint coordinates, shape (N, 2)
     image_width (int or None): Optional image width to clip to
     image_height (int or None): Optional image height to clip to
-
+    
     Returns:
     valid_kps (np.ndarray): Filtered keypoints
     valid_indices (np.ndarray): Indices of valid keypoints in original array
     """
-    # mask for non-zero points
-    valid_mask = ~(np.all(keypoints == 0, axis=1))
+    mask = ~(np.all(keypoints == 0, axis=1))
 
-    # if bounds provided, add condition
     if image_width is not None and image_height is not None:
-        in_bounds_mask = (
-            (keypoints[:, 0] >= 0) & (keypoints[:, 0] < image_width) &
-            (keypoints[:, 1] >= 0) & (keypoints[:, 1] < image_height)
+        in_bounds = (
+            (keypoints[:,0] >= 0) & (keypoints[:,0] < image_width) &
+            (keypoints[:,1] >= 0) & (keypoints[:,1] < image_height)
         )
-        valid_mask &= in_bounds_mask
+        mask &= in_bounds
 
-    valid_indices = np.where(valid_mask)[0]
-    return keypoints[valid_mask], valid_indices
+    valid_indices = np.where(mask)[0]
+    valid_kps = keypoints[valid_indices]
+
+    if min_dist is not None and valid_kps.shape[0] > 0:
+        filtered_kps = []
+        filtered_idx = []
+        for kp, idx in zip(valid_kps, valid_indices):
+            if all(np.linalg.norm(kp - prev) >= min_dist for prev in filtered_kps):
+                filtered_kps.append(kp)
+                filtered_idx.append(idx)
+        valid_kps = np.array(filtered_kps, dtype=keypoints.dtype)
+        valid_indices = np.array(filtered_idx, dtype=int)
+
+    return valid_kps, valid_indices
 
 def normalize_points(points):
     """
@@ -899,9 +909,9 @@ def process_input_file(input_file, video_path, video_width, video_height, frames
             mean_list_scale_ratio.append(scale_ratio)
 
 
-    mean_on_line=sum(mean_list)/len(mean_list) if len(mean_list) else 1
-    mean_inside = sum(mean_list_fracinside)/len(mean_list_fracinside) if len(mean_list_fracinside) else 1
-    mean_scale = sum(mean_list_scale_ratio)/len(mean_list_scale_ratio) if len(mean_list_scale_ratio) else 1
+    mean_on_line=sum(mean_list)/len(mean_list) if len(mean_list) else 0
+    mean_inside = sum(mean_list_fracinside)/len(mean_list_fracinside) if len(mean_list_fracinside) else 0
+    mean_scale = sum(mean_list_scale_ratio)/len(mean_list_scale_ratio) if len(mean_list_scale_ratio) else 0
     mean_scale = min(mean_scale,1)
     scale_valid =  np.clip(valid_counter / len(frames_to_validate) / 0.4, 0, 1)
 
