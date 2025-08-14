@@ -722,9 +722,8 @@ def compute_scene_keypoint_consistency(frames, valid_frame_ids, video_width, vid
         return {}, 1.0  # neutral if nothing to score
 
     # 1) normalize IDs to strings that actually exist in frames
-    available = set(frames.keys())
     valid_ids_str = sorted(
-        {str(fid) for fid in valid_frame_ids if str(fid) in available},
+        {str(fid) for fid in valid_frame_ids},
         key=lambda s: int(s)
     )
     if not valid_ids_str:
@@ -768,10 +767,10 @@ def compute_scene_keypoint_consistency(frames, valid_frame_ids, video_width, vid
             previous_kpts = frames[prev_id]['keypoints']
             current_kpts = frames[fid]['keypoints']
 
-            if len(previous_kpts) < 32:
-                previous_kpts = [[0.0, 0.0] for _ in range(32)]
-            if len(current_kpts) < 32:
-                current_kpts = [[0.0, 0.0] for _ in range(32)]
+            if (len(previous_kpts) != 32) or ((len(current_kpts) != 32)):
+                frame_scores.append(0.0)
+                frame_data.append((fid, 1, 0))
+                continue
 
             # get valid keypoints + their original indices
             kp_prev, idx_prev = get_valid_keypoints(
