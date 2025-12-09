@@ -393,5 +393,4 @@ class VLMProcessor:
             
             all_results.extend(processed_results)
 
-        return all_results 
-        return all_results 
+        return all_results
